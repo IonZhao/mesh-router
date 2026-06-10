@@ -1,0 +1,19 @@
+# Decrypted secrets — NEVER commit. Only the *.enc (sops) and *.example versions are tracked.
+secrets/*.env
+!secrets/*.env.example
+
+# Rendered configs (produced from *.template by bootstrap/setup via envsubst).
+vps/sing-box/config.json
+mac-mini/sing-box/config.json
+mac-mini/launchd/com.crossborder.singbox.plist
+client/clash-meta.yaml
+
+# Runtime state / data
+**/cache.db
+vps/acme/
+vps/data/
+**/.DS_Store
+
+# age private key, if a copy ever lands here
+*.agekey
+key.txt

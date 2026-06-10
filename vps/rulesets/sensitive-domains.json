@@ -1,0 +1,22 @@
+{
+  "version": 2,
+  "rules": [
+    {
+      "domain_suffix": [
+        "anthropic.com",
+        "claude.ai",
+        "claudeusercontent.com",
+        "openai.com",
+        "chatgpt.com",
+        "oaistatic.com",
+        "oaiusercontent.com",
+        "cursor.sh",
+        "cursor.com"
+      ],
+      "domain_keyword": [
+        "anthropic",
+        "openai"
+      ]
+    }
+  ]
+}

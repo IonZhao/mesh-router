@@ -1,0 +1,16 @@
+# sops + age configuration.
+#
+# 1) Install: brew install sops age   (mac)  |  apt install age + grab sops binary (linux)
+# 2) Generate a key once, keep the PRIVATE key in your password manager:
+#       age-keygen -o ~/.config/sops/age/keys.txt
+#    The public key looks like: age1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxq9xxxxx
+# 3) Paste that public key below (replace the placeholder).
+# 4) Encrypt:  sops -e secrets/vps.env > secrets/vps.env.enc   (then delete plaintext, or let bootstrap regenerate it)
+#    Edit later: sops secrets/vps.env.enc
+#
+# Only the encrypted *.enc files are committed. bootstrap.sh / setup.sh decrypt at deploy time
+# using the age private key found at $SOPS_AGE_KEY_FILE or ~/.config/sops/age/keys.txt.
+
+creation_rules:
+  - path_regex: secrets/.*\.env(\.enc)?$
+    age: "age1REPLACE_WITH_YOUR_AGE_PUBLIC_KEY"

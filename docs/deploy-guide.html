@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>cross-border-net — Deployment Guide</title>
+<style>
+  :root{
+    --bg:#0f1419; --panel:#161b22; --panel2:#1c232c; --border:#2b333d;
+    --fg:#e6edf3; --muted:#8b98a5; --accent:#4493f8; --accent2:#3fb950;
+    --warn:#d29922; --danger:#f85149; --code-bg:#0d1117; --chip:#1f6feb33;
+    --radius:10px; --mono:'SF Mono',ui-monospace,'Cascadia Code',Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--sans);line-height:1.65;font-size:15px}
+  .wrap{max-width:960px;margin:0 auto;padding:32px 24px 120px}
+  header h1{font-size:26px;margin:0 0 4px}
+  header .sub{color:var(--muted);margin:0 0 20px}
+  .progress-bar{position:sticky;top:0;z-index:20;background:var(--bg);padding:12px 0;border-bottom:1px solid var(--border);margin-bottom:24px}
+  .progress-track{height:8px;background:var(--panel2);border-radius:99px;overflow:hidden}
+  .progress-fill{height:100%;width:0;background:linear-gradient(90deg,var(--accent),var(--accent2));transition:width .3s}
+  .progress-label{font-size:12px;color:var(--muted);margin-top:6px}
+  nav.toc{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 28px}
+  nav.toc a{font-size:12.5px;color:var(--muted);text-decoration:none;background:var(--panel);border:1px solid var(--border);padding:5px 10px;border-radius:99px}
+  nav.toc a:hover{color:var(--fg);border-color:var(--accent)}
+  section{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:22px 24px;margin:0 0 18px}
+  section h2{margin:0 0 4px;font-size:19px;display:flex;align-items:center;gap:10px}
+  .phase-num{display:inline-flex;align-items:center;justify-content:center;min-width:26px;height:26px;border-radius:50%;background:var(--chip);color:var(--accent);font-size:13px;font-weight:700;border:1px solid var(--accent)}
+  section > .lead{color:var(--muted);margin:2px 0 16px}
+  h3{font-size:15px;margin:20px 0 8px;color:var(--accent)}
+  ul,ol{padding-left:22px;margin:8px 0}
+  li{margin:5px 0}
+  a{color:var(--accent)}
+  code:not(pre code){background:var(--code-bg);border:1px solid var(--border);border-radius:5px;padding:1px 6px;font-family:var(--mono);font-size:12.5px;color:#ffa657}
+  .codeblock{position:relative;margin:12px 0}
+  .codeblock pre{background:var(--code-bg);border:1px solid var(--border);border-radius:8px;padding:14px 16px;overflow-x:auto;margin:0}
+  .codeblock code{font-family:var(--mono);font-size:12.5px;color:#e6edf3;white-space:pre}
+  .copy-btn{position:absolute;top:8px;right:8px;background:var(--panel2);border:1px solid var(--border);color:var(--muted);
+    font-size:11px;padding:4px 9px;border-radius:6px;cursor:pointer;font-family:var(--sans)}
+  .copy-btn:hover{color:var(--fg);border-color:var(--accent)}
+  .copy-btn.done{color:var(--accent2);border-color:var(--accent2)}
+  .check{display:flex;gap:10px;align-items:flex-start;background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin:10px 0;cursor:pointer}
+  .check input{margin-top:4px;width:16px;height:16px;accent-color:var(--accent2);cursor:pointer;flex-shrink:0}
+  .check.done{opacity:.55}
+  .check.done .check-title{text-decoration:line-through}
+  .check-title{font-weight:600}
+  .check-body{font-size:13.5px;color:var(--muted)}
+  .callout{border-left:3px solid var(--accent);background:var(--panel2);border-radius:0 8px 8px 0;padding:10px 14px;margin:12px 0;font-size:13.5px}
+  .callout.warn{border-color:var(--warn)}
+  .callout.danger{border-color:var(--danger)}
+  .callout.tip{border-color:var(--accent2)}
+  .callout b{color:var(--fg)}
+  table{width:100%;border-collapse:collapse;margin:12px 0;font-size:13.5px}
+  th,td{border:1px solid var(--border);padding:8px 10px;text-align:left;vertical-align:top}
+  th{background:var(--panel2);color:var(--fg)}
+  details{background:var(--panel2);border:1px solid var(--border);border-radius:8px;margin:10px 0;padding:0 14px}
+  details summary{cursor:pointer;padding:12px 0;font-weight:600;list-style:none}
+  details summary::-webkit-details-marker{display:none}
+  details summary::before{content:'▸ ';color:var(--accent)}
+  details[open] summary::before{content:'▾ '}
+  details .details-body{padding:0 0 14px}
+  kbd{background:var(--panel2);border:1px solid var(--border);border-bottom-width:2px;border-radius:4px;padding:1px 6px;font-size:12px;font-family:var(--mono)}
+  .reset{background:none;border:1px solid var(--border);color:var(--muted);font-size:11px;padding:4px 10px;border-radius:6px;cursor:pointer;margin-left:auto}
+  .reset:hover{color:var(--danger);border-color:var(--danger)}
+  .pill{font-size:11px;padding:2px 8px;border-radius:99px;border:1px solid var(--border);color:var(--muted);background:var(--panel2)}
+  footer{color:var(--muted);font-size:12.5px;text-align:center;margin-top:30px}
+  svg{max-width:100%;height:auto}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>cross-border-net — Deployment Guide</h1>
+  <p class="sub">Tokyo VPS control plane + US Mac mini residential exit. Follow top to bottom; check off each box as you go (progress is saved in this browser).</p>
+</header>
+
+<div class="progress-bar">
+  <div class="progress-track"><div class="progress-fill" id="pfill"></div></div>
+  <div class="progress-label"><span id="plabel">0 / 0 steps complete</span>
+    <button class="reset" onclick="resetProgress()">reset progress</button></div>
+</div>
+
+<nav class="toc">
+  <a href="#arch">Architecture</a>
+  <a href="#p0">0 · Shopping list</a>
+  <a href="#p1">1 · Domain</a>
+  <a href="#p2">2 · Tailscale</a>
+  <a href="#p3">3 · Secrets</a>
+  <a href="#p4">4 · Mac mini</a>
+  <a href="#p5">5 · VPS</a>
+  <a href="#p6">6 · Firewall</a>
+  <a href="#p7">7 · Client</a>
+  <a href="#p8">8 · Verify</a>
+  <a href="#modes">Switch modes</a>
+  <a href="#runbooks">Runbooks</a>
+  <a href="#trouble">Troubleshooting</a>
+</nav>
+
+<section id="arch">
+  <h2>Architecture at a glance</h2>
+  <svg viewBox="0 0 760 230" xmlns="http://www.w3.org/2000/svg" font-family="var(--sans)">
+    <defs>
+      <marker id="arrow" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#4493f8"/></marker>
+    </defs>
+    <!-- boxes -->
+    <rect x="10" y="90" width="150" height="56" rx="10" fill="#1c232c" stroke="#2b333d"/>
+    <text x="85" y="113" fill="#e6edf3" font-size="13" text-anchor="middle" font-weight="700">Client (China)</text>
+    <text x="85" y="131" fill="#8b98a5" font-size="11" text-anchor="middle">Clash Meta · geo split</text>
+
+    <rect x="250" y="70" width="180" height="96" rx="10" fill="#1c232c" stroke="#4493f8"/>
+    <text x="340" y="92" fill="#e6edf3" font-size="13" text-anchor="middle" font-weight="700">VPS (Tokyo)</text>
+    <text x="340" y="110" fill="#8b98a5" font-size="11" text-anchor="middle">sing-box · routing brain</text>
+    <text x="340" y="128" fill="#8b98a5" font-size="11" text-anchor="middle">Reality :443 / Hy2 :8443</text>
+    <text x="340" y="148" fill="#3fb950" font-size="11" text-anchor="middle">trusted-exit selector</text>
+
+    <rect x="560" y="30" width="180" height="56" rx="10" fill="#1c232c" stroke="#3fb950"/>
+    <text x="650" y="53" fill="#e6edf3" font-size="13" text-anchor="middle" font-weight="700">Mac mini (US)</text>
+    <text x="650" y="71" fill="#8b98a5" font-size="11" text-anchor="middle">residential exit · zero rules</text>
+
+    <rect x="560" y="150" width="180" height="48" rx="10" fill="#1c232c" stroke="#2b333d"/>
+    <text x="650" y="170" fill="#e6edf3" font-size="13" text-anchor="middle" font-weight="700">Direct egress</text>
+    <text x="650" y="187" fill="#8b98a5" font-size="11" text-anchor="middle">datacenter IP</text>
+
+    <!-- arrows -->
+    <line x1="160" y1="118" x2="248" y2="118" stroke="#4493f8" stroke-width="2" marker-end="url(#arrow)"/>
+    <line x1="430" y1="100" x2="558" y2="62" stroke="#3fb950" stroke-width="2" marker-end="url(#arrow)"/>
+    <line x1="430" y1="140" x2="558" y2="170" stroke="#8b98a5" stroke-width="2" marker-end="url(#arrow)"/>
+    <text x="495" y="70" fill="#3fb950" font-size="10" text-anchor="middle">sensitive (Tailscale)</text>
+    <text x="495" y="200" fill="#8b98a5" font-size="10" text-anchor="middle">everything else</text>
+  </svg>
+  <p class="lead" style="margin-top:8px">Two decisions, two owners: the <b>client</b> decides geography (China vs. abroad), the <b>VPS</b> decides trust (residential vs. datacenter). The Mac mini decides nothing.</p>
+</section>
+
+<section id="p0">
+  <h2><span class="phase-num">0</span> Shopping list & prerequisites</h2>
+  <p class="lead">Get these before touching any config. Total recurring cost ≈ VPS ($10–20/mo) + domain (~$10/yr); Tailscale + Mac mini you already have.</p>
+  <label class="check"><input type="checkbox" data-step><span><span class="check-title">VPS in Tokyo</span><br><span class="check-body">2 vCPU / 2–4 GB RAM / ≥2 TB traffic, Debian 12 or Ubuntu 22.04+. Prioritize a good China route (Softbank/IIJ peering or CN2 GIA) over CPU. Providers: Vultr, BandwagonHost CN2 GIA, or a JP cloud.</span></span></label>
+  <label class="check"><input type="checkbox" data-step><span><span class="check-title">Mac mini on US residential internet</span><br><span class="check-body">Any recent model. Plugged into home/office broadband (not a datacenter). Admin account with <code>sudo</code>.</span></span></label>
+  <label class="check"><input type="checkbox" data-step><span><span class="check-title">A domain name</span><br><span class="check-body">Configured in Phase 1. ~$10/yr.</span></span></label>
+  <label class="check"><input type="checkbox" data-step><span><span class="check-title">Tailscale account</span><br><span class="check-body">Free tier. Sign up at <a href="https://login.tailscale.com" target="_blank" rel="noopener">login.tailscale.com</a> (Google/GitHub/Microsoft login).</span></span></label>
+  <label class="check"><input type="checkbox" data-step><span><span class="check-title">Tools on your laptop</span><br><span class="check-body">git, Docker (to run gen-secrets), and optionally <code>sops</code> + <code>age</code> (<code>brew install sops age</code>) for encrypted secrets in git.</span></span></label>
+  <div class="callout tip"><b>Tip:</b> clone the repo locally first — <code>git clone &lt;repo&gt; &amp;&amp; cd cross-border-net</code> — every command below assumes you're inside it.</div>
+</section>
+
+<section id="p1">
+  <h2><span class="phase-num">1</span> Buy &amp; configure the domain</h2>
+  <p class="lead">You said you don't have one yet — here's the full path. The domain is needed so Hysteria2 can get a real TLS certificate automatically. Reality (port 443) does <b>not</b> use it.</p>
+
+  <h3>1a. Register a domain</h3>
+  <p>Any registrar works. <b>Cloudflare Registrar</b> is recommended because it's at-cost (~$10/yr, no markup), gives you free DNS, and lets you add the optional CDN fallback path later.</p>
+  <ul>
+    <li>Go to <a href="https://dash.cloudflare.com" target="_blank" rel="noopener">dash.cloudflare.com</a> → <b>Domain Registration → Register Domains</b>.</li>
+    <li>Search a cheap TLD (<code>.com</code>, <code>.net</code>, or budget ones like <code>.xyz</code>). Avoid free domains — they're unreliable.</li>
+    <li>Buy it. The domain's DNS is now managed in Cloudflare automatically.</li>
+  </ul>
+  <div class="callout"><b>Already have a registrar (Namecheap/Porkbun/GoDaddy)?</b> Fine — either use their DNS panel for step 1b, or point the nameservers at Cloudflare (Cloudflare → Add a site → it tells you which NS to set at your registrar).</div>
+
+  <h3>1b. Point a subdomain at your VPS</h3>
+  <p>Once you have the VPS's public IP (from your VPS provider's dashboard), create an <b>A record</b>:</p>
+  <table>
+    <tr><th>Type</th><th>Name</th><th>Content</th><th>Proxy status</th></tr>
+    <tr><td>A</td><td><code>proxy</code></td><td>your VPS IP, e.g. <code>203.0.113.45</code></td><td><b>DNS only</b> (grey cloud)</td></tr>
+  </table>
+  <div class="callout danger"><b>Critical:</b> set proxy status to <b>DNS only / grey cloud</b>, NOT proxied/orange. Hysteria2 is UDP, and Cloudflare's proxy doesn't pass arbitrary UDP — orange cloud would break it. (The orange cloud is only for the optional CDN-over-WebSocket fallback, which is a separate record.)</div>
+  <p>This gives you <code>proxy.yourdomain.com</code> → your VPS. That hostname is your <code>PROXY_DOMAIN</code>.</p>
+
+  <label class="check"><input type="checkbox" data-step><span><span class="check-title">Domain registered</span></span></label>
+  <label class="check"><input type="checkbox" data-step><span><span class="check-title">A record <code>proxy.yourdomain.com</code> → VPS IP, set to DNS-only</span></span></label>
+  <label class="check"><input type="checkbox" data-step><span><span class="check-title">Verified it resolves</span><br><span class="check-body">From any machine: <code>nslookup proxy.yourdomain.com</code> should return your VPS IP (may take a few minutes to propagate).</span></span></label>
+</section>
+
+<section id="p2">
+  <h2><span class="phase-num">2</span> Tailscale: account &amp; two auth keys</h2>
+  <p class="lead">Tailscale is the private link between VPS and Mac, and your out-of-band rescue channel. You need <b>two</b> auth keys (one per machine).</p>
+  <ol>
+    <li>Open <a href="https://login.tailscale.com/admin/settings/keys" target="_blank" rel="noopener">Tailscale admin → Settings → Keys</a>.</li>
+    <li>Click <b>Generate auth key</b>. Enable <b>Reusable</b> off (one-time is fine), set a description like "tokyo-vps". Copy the <code>tskey-auth-...</code> value.</li>
+    <li>Generate a <b>second</b> key for "mac-mini-exit". Copy it too.</li>
+  </ol>
+  <div class="callout tip"><b>Enable Tailscale SSH</b> (admin → Settings, or per-key) so you can rescue the Mac mini even when the proxy path is dead — this is the whole point of having it as an out-of-band channel.</div>
+  <label class="check"><input type="checkbox" data-step><span><span class="check-title">Auth key #1 generated (for VPS)</span></span></label>
+  <label class="check"><input type="checkbox" data-step><span><span class="check-title">Auth key #2 generated (for Mac mini)</span></span></label>
+</section>
+
+<section id="p3">
+  <h2><span class="phase-num">3</span> Generate secrets</h2>
+  <p class="lead">Run once on your laptop (needs Docker). This creates UUIDs, the Reality keypair, and passwords, and writes <code>secrets/vps.env</code> + <code>secrets/mac.env</code>.</p>
+  <div class="codeblock"><button class="copy-btn">copy</button><pre><code>scripts/gen-secrets.sh</code></pre></div>
+  <p>Then open <code>secrets/vps.env</code> and fill in the human fields:</p>
+  <table>
+    <tr><th>Field</th><th>Value</th></tr>
+    <tr><td><code>PROXY_DOMAIN</code></td><td><code>proxy.yourdomain.com</code> (from Phase 1)</td></tr>
+    <tr><td><code>ACME_EMAIL</code></td><td>your email (Let's Encrypt notices)</td></tr>
+    <tr><td><code>REALITY_HANDSHAKE</code></td><td><code>www.microsoft.com</code> (a TLS1.3 site to impersonate; the default is fine)</td></tr>
+    <tr><td><code>VPS_HOST</code></td><td>your VPS public IP (Reality connects by IP)</td></tr>
+    <tr><td><code>TS_AUTHKEY</code></td><td>auth key #1 from Phase 2</td></tr>
+    <tr><td><code>MAC_TAILSCALE_IP</code></td><td>leave as placeholder — Phase 4 fills it</td></tr>
+  </table>
+  <p>And in <code>secrets/mac.env</code>, set <code>TS_AUTHKEY</code> = auth key #2.</p>
+  <div class="callout tip"><b>Optional — encrypt for git:</b> after editing, <code>sops -e secrets/vps.env &gt; secrets/vps.env.enc</code> (same for mac.env). Commit only the <code>.enc</code> files. See <code>.sops.yaml</code> for the one-time age key setup.</div>
+  <label class="check"><input type="checkbox" data-step><span><span class="check-title">Ran gen-secrets.sh</span></span></label>
+  <label class="check"><input type="checkbox" data-step><span><span class="check-title">Filled human fields in secrets/vps.env and secrets/mac.env</span></span></label>
+</section>
+
+<section id="p4">
+  <h2><span class="phase-num">4</span> Mac mini exit node</h2>
+  <p class="lead">Do the Mac <b>before</b> the VPS — it prints its Tailscale IP, which the VPS needs. Run these <b>on the Mac mini</b>.</p>
+  <div class="codeblock"><button class="copy-btn">copy</button><pre><code>cd cross-border-net/mac-mini
+./setup.sh</code></pre></div>
+  <p>The script: installs sing-box + tailscale via brew, joins the tailnet, detects the Mac's Tailscale IP, renders the sing-box config, installs a LaunchDaemon (auto-starts at boot), and applies power settings. At the end it prints a line like:</p>
+  <div class="codeblock"><button class="copy-btn">copy</button><pre><code>MAC_TAILSCALE_IP=100.101.102.103</code></pre></div>
+  <p><b>Copy that exact value into <code>secrets/vps.env</code></b> (replace the <code>100.x.y.z</code> placeholder).</p>
+  <div class="callout warn"><b>Finish in System Settings (can't be fully scripted):</b> Energy → enable <i>"Start up automatically after power failure"</i> and <i>"Prevent automatic sleeping"</i>; and defer macOS automatic updates to a manual window so an OS update doesn't silently reboot your exit at 3am.</div>
+  <label class="check"><input type="checkbox" data-step><span><span class="check-title">setup.sh completed on the Mac</span></span></label>
+  <label class="check"><input type="checkbox" data-step><span><span class="check-title">Copied MAC_TAILSCALE_IP into secrets/vps.env</span></span></label>
+  <label class="check"><input type="checkbox" data-step><span><span class="check-title">Set power + update settings in System Settings</span></span></label>
+</section>
+
+<section id="p5">
+  <h2><span class="phase-num">5</span> VPS stack</h2>
+  <p class="lead">Run <b>on the VPS</b>. First install Docker if it's a fresh machine.</p>
+  <h3>5a. Install Docker (skip if present)</h3>
+  <div class="codeblock"><button class="copy-btn">copy</button><pre><code>curl -fsSL https://get.docker.com | sudo sh
+sudo apt-get install -y gettext-base   # provides envsubst</code></pre></div>
+  <h3>5b. Bootstrap</h3>
+  <p>Get the repo + secrets onto the VPS (git clone, or scp your filled-in <code>secrets/</code>, or commit the sops <code>.enc</code> files and let bootstrap decrypt). Then:</p>
+  <div class="codeblock"><button class="copy-btn">copy</button><pre><code>cd cross-border-net/vps
+./bootstrap.sh</code></pre></div>
+  <p>It validates secrets, renders <code>config.json</code>, checks it with <code>sing-box check</code>, and starts the stack. Confirm Tailscale joined:</p>
+  <div class="codeblock"><button class="copy-btn">copy</button><pre><code>docker exec tailscale tailscale status</code></pre></div>
+  <div class="callout warn"><b>Hysteria2 cert:</b> on first start sing-box requests a Let's Encrypt cert over port 80 (HTTP-01). It needs <code>proxy.yourdomain.com</code> to resolve to this VPS and port 80 reachable (the firewall in Phase 6 allows it). If the cert fails, check the sing-box logs: <code>docker logs sing-box</code>.</div>
+  <label class="check"><input type="checkbox" data-step><span><span class="check-title">Docker installed</span></span></label>
+  <label class="check"><input type="checkbox" data-step><span><span class="check-title">bootstrap.sh completed (stack up)</span></span></label>
+  <label class="check"><input type="checkbox" data-step><span><span class="check-title">Tailscale shows the VPS + Mac as peers</span></span></label>
+</section>
+
+<section id="p6">
+  <h2><span class="phase-num">6</span> Firewall</h2>
+  <p class="lead">Lock down everything except the proxy ports. Run <b>on the VPS</b>.</p>
+  <div class="codeblock"><button class="copy-btn">copy</button><pre><code>sudo cross-border-net/scripts/firewall.sh</code></pre></div>
+  <p>After this, only <code>443/tcp</code>, <code>8443/udp</code>, <code>80/tcp</code> (ACME), and <code>22/tcp</code> (SSH) are public. The dashboards (9090/19999/3001/8685) are reachable only over Tailscale.</p>
+  <label class="check"><input type="checkbox" data-step><span><span class="check-title">Firewall applied</span></span></label>
+</section>
+
+<section id="p7">
+  <h2><span class="phase-num">7</span> Client config</h2>
+  <p class="lead">Render the Clash Meta config (on any machine with the secrets), then import it into your China-side client.</p>
+  <div class="codeblock"><button class="copy-btn">copy</button><pre><code>cd cross-border-net/client
+./render-client-config.sh   # writes clash-meta.yaml</code></pre></div>
+  <p>Import <code>clash-meta.yaml</code> into a Clash Meta / mihomo client:</p>
+  <ul>
+    <li><b>Windows/macOS:</b> Clash Verge Rev, or mihomo Party, or FlClash.</li>
+    <li><b>iOS:</b> Stash / Shadowrocket (support Reality + Hysteria2).</li>
+    <li><b>Android:</b> FlClash / ClashMetaForAndroid.</li>
+  </ul>
+  <div class="callout"><b>How it routes:</b> the client sends CN traffic direct and everything else to the VPS via a url-test group (Reality primary, Hysteria2 backup — automatic failover). It does <b>not</b> decide which exit a site uses; the VPS does.</div>
+  <label class="check"><input type="checkbox" data-step><span><span class="check-title">Rendered clash-meta.yaml</span></span></label>
+  <label class="check"><input type="checkbox" data-step><span><span class="check-title">Imported into client &amp; connected</span></span></label>
+</section>
+
+<section id="p8">
+  <h2><span class="phase-num">8</span> Verify it works</h2>
+  <p class="lead">Open the dashboard over Tailscale (use the VPS's Tailscale IP — <code>tailscale ip -4</code> on the VPS):</p>
+  <div class="codeblock"><button class="copy-btn">copy</button><pre><code>http://&lt;vps-tailscale-ip&gt;:9090/ui</code></pre></div>
+  <p>The secret is your <code>CLASH_API_SECRET</code> (in <code>secrets/vps.env</code>).</p>
+  <h3>Checks</h3>
+  <label class="check"><input type="checkbox" data-step><span><span class="check-title">Residential exit is live</span><br><span class="check-body">With the client connected, open <a href="https://www.whatismyip.com" target="_blank" rel="noopener">whatismyip.com</a> then visit Claude/OpenAI — in the dashboard's <b>Connections</b> tab, confirm <code>claude.ai</code> goes out via <code>trusted-exit → mac-out</code>. The IP geolocation for those sites should be your US home, not Tokyo.</span></span></label>
+  <label class="check"><input type="checkbox" data-step><span><span class="check-title">Normal traffic goes direct</span><br><span class="check-body">Visit GitHub — confirm it goes out <code>direct</code> (Tokyo IP). CN sites should not appear in the VPS connections at all (client handled them).</span></span></label>
+  <label class="check"><input type="checkbox" data-step><span><span class="check-title">Uptime Kuma monitor added</span><br><span class="check-body">At <code>http://&lt;vps-ts-ip&gt;:3001</code> create a <b>TCP Port</b> monitor: host = Mac Tailscale IP, port <code>18443</code>, interval 60s, add a notification. This makes the fail-open behavior safe (you'll know when the Mac drops).</span></span></label>
+  <label class="check"><input type="checkbox" data-step><span><span class="check-title">Tailscale link is direct, not DERP</span><br><span class="check-body"><code>docker exec tailscale tailscale status</code> — the Mac peer should show a <code>100.x</code>/direct address, not "relay". If relayed, throughput will be poor; check NAT / enable UPnP on the home router.</span></span></label>
+</section>
+
+<section id="modes">
+  <h2>Switching exit modes (no redeploy)</h2>
+  <p class="lead">Mode A = residential (Mac mini). Mode B = VPS-direct (if your VPS has a clean native IP, or the Mac is offline for a while). Route rules never change — you just pick a selector member in the dashboard.</p>
+  <table>
+    <tr><th>Member</th><th>Behaviour</th><th>When</th></tr>
+    <tr><td><code>mac-auto</code> <span class="pill">default</span></td><td>prefer Mac mini, auto fail-open to VPS direct if down</td><td>normal operation</td></tr>
+    <tr><td><code>mac-out</code></td><td>pin to Mac mini, fail closed</td><td>strict IP purity</td></tr>
+    <tr><td><code>direct</code></td><td>VPS's own IP</td><td>Mode B</td></tr>
+  </table>
+  <p>In metacubexd → <b>Proxies</b> → group <code>trusted-exit</code> → click a member. Instant, persists across restarts. For a permanent default change, also edit <code>"default"</code> in <code>vps/sing-box/config.json.template</code> and re-run <code>bootstrap.sh</code>. In Mode B the Mac tunnel + monitoring stay running, just unused.</p>
+</section>
+
+<section id="runbooks">
+  <h2>Runbooks</h2>
+  <details>
+    <summary>VPS IP got blocked (most likely disaster — target &lt; 30 min)</summary>
+    <div class="details-body">
+    <ol>
+      <li>Provision a new VPS (or request an IP swap from the provider).</li>
+      <li>Get the repo + secrets onto it and run <code>vps/bootstrap.sh</code>.</li>
+      <li>Update the DNS A record <code>proxy.yourdomain.com</code> → new IP, and <code>VPS_HOST</code> in <code>secrets/vps.env</code>.</li>
+      <li>Re-render the client config (<code>client/render-client-config.sh</code>) and re-import. Reality reconnects by IP.</li>
+    </ol>
+    <p>Insurance against this: the optional Cloudflare CDN-over-WebSocket path (design doc §4.1) survives IP blocking entirely.</p>
+    </div>
+  </details>
+  <details>
+    <summary>Mac mini went down</summary>
+    <div class="details-body">
+    <ul>
+      <li>You're not offline — <code>mac-auto</code> already failed sensitive traffic over to the VPS direct exit (Uptime Kuma should have alerted you).</li>
+      <li>SSH in over Tailscale (works even with the data path dead): <code>ssh you@mac-mini-exit</code>.</li>
+      <li>Re-run <code>mac-mini/setup.sh</code> to rebuild. Inspect the daemon: <code>sudo launchctl print system/com.crossborder.singbox | grep state</code> and logs at <code>~/Library/Logs/cross-border-net/</code>.</li>
+    </ul>
+    </div>
+  </details>
+  <details>
+    <summary>Rotate secrets</summary>
+    <div class="details-body">
+    <p>Re-run <code>scripts/gen-secrets.sh</code> (regenerates random values), re-encrypt with sops, then re-run <code>bootstrap.sh</code> on the VPS and <code>setup.sh</code> on the Mac, and re-render the client config. Changing <code>MAC_VLESS_UUID</code> requires updating both ends (it's shared).</p>
+    </div>
+  </details>
+</section>
+
+<section id="trouble">
+  <h2>Troubleshooting</h2>
+  <table>
+    <tr><th>Symptom</th><th>Likely cause / fix</th></tr>
+    <tr><td>Hysteria2 won't get a cert</td><td><code>proxy.yourdomain.com</code> not resolving to the VPS, or port 80 blocked. Check <code>nslookup</code> + firewall + <code>docker logs sing-box</code>.</td></tr>
+    <tr><td>Client connects but no sites load</td><td>Reality params mismatch. Verify the client's <code>public-key</code>/<code>short-id</code>/<code>servername</code> match the VPS. Re-render the client config.</td></tr>
+    <tr><td>Claude/OpenAI show Tokyo IP, not US</td><td>You're in Mode B or the Mac is down → fail-open kicked in. Check the <code>trusted-exit</code> selector + Uptime Kuma.</td></tr>
+    <tr><td>Slow / high latency to US sites</td><td>Tailscale on DERP relay (run the status check), or poor VPS↔China route. Consider a US-West VPS (design doc §4.3).</td></tr>
+    <tr><td>Can't reach a dashboard</td><td>You must be on Tailscale and use the VPS's <code>100.x</code> IP, not its public IP — the firewall blocks admin ports publicly.</td></tr>
+    <tr><td><code>sing-box check</code> fails after a version bump</td><td>Config schema changed (esp. DNS in 1.12+). Pin <code>SINGBOX_VERSION</code> back to <code>v1.11.x</code> in <code>.env</code> or migrate the config.</td></tr>
+  </table>
+</section>
+
+<footer>
+  cross-border-net · operational guide · canonical reference is <code>README.md</code> · design rationale in <code>../docs/2026-06-10-cross-border-network-design.md</code>
+</footer>
+
+</div>
+
+<script>
+(function(){
+  // Copy buttons
+  document.querySelectorAll('.copy-btn').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      var code = btn.parentElement.querySelector('code').innerText;
+      navigator.clipboard.writeText(code).then(function(){
+        var old = btn.textContent; btn.textContent='copied ✓'; btn.classList.add('done');
+        setTimeout(function(){btn.textContent=old; btn.classList.remove('done');},1400);
+      });
+    });
+  });
+
+  // Progress: persist each data-step checkbox by index in localStorage
+  var KEY='cbn-deploy-progress-v1';
+  var boxes = Array.prototype.slice.call(document.querySelectorAll('input[data-step]'));
+  var saved = {};
+  try{ saved = JSON.parse(localStorage.getItem(KEY)||'{}'); }catch(e){}
+
+  function update(){
+    var done=0;
+    boxes.forEach(function(b,i){
+      var row=b.closest('.check');
+      if(b.checked){done++; row.classList.add('done');} else {row.classList.remove('done');}
+    });
+    var pct = boxes.length? Math.round(done/boxes.length*100):0;
+    document.getElementById('pfill').style.width = pct+'%';
+    document.getElementById('plabel').textContent = done+' / '+boxes.length+' steps complete ('+pct+'%)';
+  }
+  boxes.forEach(function(b,i){
+    b.checked = !!saved[i];
+    b.addEventListener('change', function(){
+      saved[i]=b.checked; localStorage.setItem(KEY, JSON.stringify(saved)); update();
+    });
+  });
+  update();
+
+  window.resetProgress=function(){
+    saved={}; localStorage.removeItem(KEY);
+    boxes.forEach(function(b){b.checked=false;});
+    update();
+  };
+})();
+</script>
+</body>
+</html>

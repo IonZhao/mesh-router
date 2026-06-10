@@ -1,0 +1,143 @@
+{
+  "log": {
+    "level": "info",
+    "timestamp": true
+  },
+  "dns": {
+    "servers": [
+      {
+        "tag": "doh-remote",
+        "address": "https://1.1.1.1/dns-query",
+        "detour": "direct"
+      }
+    ],
+    "final": "doh-remote",
+    "strategy": "prefer_ipv4"
+  },
+  "inbounds": [
+    {
+      "type": "vless",
+      "tag": "vless-reality-in",
+      "listen": "::",
+      "listen_port": 443,
+      "sniff": true,
+      "sniff_override_destination": false,
+      "users": [
+        {
+          "uuid": "${VLESS_UUID}",
+          "flow": "xtls-rprx-vision"
+        }
+      ],
+      "tls": {
+        "enabled": true,
+        "server_name": "${REALITY_HANDSHAKE}",
+        "reality": {
+          "enabled": true,
+          "handshake": {
+            "server": "${REALITY_HANDSHAKE}",
+            "server_port": 443
+          },
+          "private_key": "${REALITY_PRIVATE_KEY}",
+          "short_id": ["${REALITY_SHORT_ID}"]
+        }
+      }
+    },
+    {
+      "type": "hysteria2",
+      "tag": "hy2-in",
+      "listen": "::",
+      "listen_port": 8443,
+      "sniff": true,
+      "sniff_override_destination": false,
+      "users": [
+        {
+          "password": "${HY2_PASSWORD}"
+        }
+      ],
+      "tls": {
+        "enabled": true,
+        "alpn": ["h3"],
+        "server_name": "${PROXY_DOMAIN}",
+        "acme": {
+          "domain": ["${PROXY_DOMAIN}"],
+          "email": "${ACME_EMAIL}",
+          "provider": "letsencrypt",
+          "data_directory": "/etc/sing-box/acme"
+        }
+      }
+    }
+  ],
+  "outbounds": [
+    {
+      "type": "direct",
+      "tag": "direct"
+    },
+    {
+      "type": "vless",
+      "tag": "mac-out",
+      "server": "${MAC_TAILSCALE_IP}",
+      "server_port": 18443,
+      "uuid": "${MAC_VLESS_UUID}"
+    },
+    {
+      "type": "urltest",
+      "tag": "mac-auto",
+      "outbounds": ["mac-out", "direct"],
+      "url": "https://www.gstatic.com/generate_204",
+      "interval": "1m",
+      "tolerance": 100
+    },
+    {
+      "type": "selector",
+      "tag": "trusted-exit",
+      "outbounds": ["mac-auto", "mac-out", "direct"],
+      "default": "mac-auto"
+    }
+  ],
+  "route": {
+    "rule_set": [
+      {
+        "type": "local",
+        "tag": "sensitive",
+        "format": "source",
+        "path": "/etc/sing-box/rulesets/sensitive-domains.json"
+      },
+      {
+        "type": "local",
+        "tag": "api-direct",
+        "format": "source",
+        "path": "/etc/sing-box/rulesets/api-domains.json"
+      }
+    ],
+    "rules": [
+      {
+        "ip_is_private": true,
+        "outbound": "direct"
+      },
+      {
+        "rule_set": "api-direct",
+        "outbound": "direct"
+      },
+      {
+        "rule_set": "sensitive",
+        "outbound": "trusted-exit"
+      }
+    ],
+    "final": "direct",
+    "auto_detect_interface": true
+  },
+  "experimental": {
+    "cache_file": {
+      "enabled": true,
+      "path": "/etc/sing-box/cache.db",
+      "store_fakeip": false
+    },
+    "clash_api": {
+      "external_controller": "0.0.0.0:9090",
+      "external_ui": "ui",
+      "external_ui_download_url": "https://github.com/MetaCubeX/metacubexd/archive/refs/heads/gh-pages.zip",
+      "external_ui_download_detour": "direct",
+      "secret": "${CLASH_API_SECRET}"
+    }
+  }
+}

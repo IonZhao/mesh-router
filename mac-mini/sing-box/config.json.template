@@ -1,0 +1,28 @@
+{
+  "log": {
+    "level": "warn",
+    "timestamp": true
+  },
+  "inbounds": [
+    {
+      "type": "vless",
+      "tag": "in-from-vps",
+      "listen": "${MAC_TAILSCALE_IP}",
+      "listen_port": ${MAC_VLESS_PORT},
+      "users": [
+        {
+          "uuid": "${MAC_VLESS_UUID}"
+        }
+      ]
+    }
+  ],
+  "outbounds": [
+    {
+      "type": "direct",
+      "tag": "direct"
+    }
+  ],
+  "route": {
+    "final": "direct"
+  }
+}

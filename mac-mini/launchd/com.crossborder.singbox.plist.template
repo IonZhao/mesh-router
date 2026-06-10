@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.crossborder.singbox</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>${SINGBOX_BIN}</string>
+        <string>run</string>
+        <string>-c</string>
+        <string>${SINGBOX_CONFIG}</string>
+    </array>
+
+    <!-- Keep it alive across crashes and restarts. -->
+    <key>KeepAlive</key>
+    <true/>
+    <key>RunAtLoad</key>
+    <true/>
+
+    <!-- Wait for the network (incl. Tailscale) to come up before retrying too fast. -->
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+
+    <key>StandardOutPath</key>
+    <string>${LOG_DIR}/sing-box.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>${LOG_DIR}/sing-box.err.log</string>
+</dict>
+</plist>

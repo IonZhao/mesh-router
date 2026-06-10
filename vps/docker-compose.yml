@@ -1,0 +1,86 @@
+# VPS stack — Tokyo control plane.
+# All services use host networking: sing-box must reach the tailscale0 interface and bind
+# privileged proxy ports; tailscale creates tailscale0 in the host namespace.
+# Admin ports (9090 clash-api, 19999 netdata, 3001 uptime-kuma) are NOT firewalled open to
+# the public — scripts/firewall.sh only permits them from the Tailscale CIDR (100.64.0.0/10).
+#
+# Variables: image tags come from ../.env (committed, non-secret).
+# Secrets:   the tailscale container reads TS_AUTHKEY from ../secrets/vps.env (gitignored).
+#            sing-box reads NO secrets here — its config.json is pre-rendered by bootstrap.sh.
+
+services:
+  sing-box:
+    image: ghcr.io/sagernet/sing-box:${SINGBOX_VERSION}
+    container_name: sing-box
+    restart: always
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
+    volumes:
+      - ./sing-box/config.json:/etc/sing-box/config.json:ro
+      - ./rulesets:/etc/sing-box/rulesets:ro
+      - ./data/sing-box:/etc/sing-box/data        # cache.db lives here (see config path)
+      - ./acme:/etc/sing-box/acme                 # Let's Encrypt cert storage (persisted)
+    command: ["run", "-c", "/etc/sing-box/config.json"]
+    depends_on:
+      - tailscale
+
+  tailscale:
+    image: tailscale/tailscale:${TAILSCALE_VERSION}
+    container_name: tailscale
+    restart: always
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    env_file:
+      - ../secrets/vps.env       # provides TS_AUTHKEY
+    environment:
+      - TS_STATE_DIR=/var/lib/tailscale
+      - TS_USERSPACE=false
+      - TS_HOSTNAME=tokyo-vps
+      - TS_EXTRA_ARGS=--accept-dns=false
+    volumes:
+      - ./data/tailscale:/var/lib/tailscale
+
+  netdata:
+    image: netdata/netdata:${NETDATA_VERSION}
+    container_name: netdata
+    restart: always
+    network_mode: host
+    cap_add:
+      - SYS_PTRACE
+      - SYS_ADMIN
+    security_opt:
+      - apparmor:unconfined
+    volumes:
+      - ./data/netdata/config:/etc/netdata
+      - ./data/netdata/lib:/var/lib/netdata
+      - ./data/netdata/cache:/var/cache/netdata
+      - /etc/passwd:/host/etc/passwd:ro
+      - /etc/group:/host/etc/group:ro
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /etc/os-release:/host/etc/os-release:ro
+
+  uptime-kuma:
+    image: louislam/uptime-kuma:${UPTIMEKUMA_VERSION}
+    container_name: uptime-kuma
+    restart: always
+    network_mode: host       # so it can probe the Mac mini's Tailscale IP directly
+    volumes:
+      - ./data/uptime-kuma:/app/data
+
+  vnstat:
+    image: vergoh/vnstat:${VNSTAT_VERSION}
+    container_name: vnstat
+    restart: always
+    network_mode: host
+    environment:
+      - HTTP_PORT=8685
+      - HTTP_BIND=0.0.0.0
+      - LARGE_FONTS=1
+    volumes:
+      - ./data/vnstat:/var/lib/vnstat

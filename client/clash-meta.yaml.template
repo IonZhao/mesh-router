@@ -1,0 +1,78 @@
+# Clash Meta (mihomo) client config — runs on the China-side machine.
+# Responsibility: GEO split only. CN traffic -> DIRECT; everything else -> the VPS,
+# which then makes the trust decision (residential vs. datacenter exit).
+#
+# Rendered from this template by client/render-client-config.sh (fills ${...} from secrets).
+# DNS uses fake-ip so foreign domains are NEVER resolved locally — the hostname is forwarded
+# inside the proxy protocol to the VPS, which resolves remotely (no DNS poisoning / leaks).
+
+mixed-port: 7890
+allow-lan: false
+mode: rule
+log-level: info
+ipv6: false
+unified-delay: true
+tcp-concurrent: true
+find-process-mode: 'off'
+global-client-fingerprint: chrome
+
+profile:
+  store-selected: true
+
+dns:
+  enable: true
+  ipv6: false
+  enhanced-mode: fake-ip
+  fake-ip-range: 198.18.0.1/16
+  fake-ip-filter:
+    - '*.lan'
+    - '*.local'
+    - 'geosite:cn'
+    - 'geosite:private'
+  nameserver:                       # used only for CN / fake-ip-filter domains
+    - https://223.5.5.5/dns-query
+    - https://120.53.53.53/dns-query
+  proxy-server-nameserver:          # resolves the proxy server's own address, direct
+    - https://223.5.5.5/dns-query
+
+proxies:
+  - name: reality-tokyo
+    type: vless
+    server: ${VPS_HOST}             # VPS public IP (Reality connects by IP)
+    port: 443
+    uuid: ${VLESS_UUID}
+    network: tcp
+    udp: true
+    tls: true
+    flow: xtls-rprx-vision
+    servername: ${REALITY_HANDSHAKE}
+    client-fingerprint: chrome
+    reality-opts:
+      public-key: ${REALITY_PUBLIC_KEY}
+      short-id: ${REALITY_SHORT_ID}
+
+  - name: hy2-tokyo
+    type: hysteria2
+    server: ${PROXY_DOMAIN}         # Hysteria2 connects by domain (real TLS cert)
+    port: 8443
+    password: ${HY2_PASSWORD}
+    sni: ${PROXY_DOMAIN}
+    alpn:
+      - h3
+
+proxy-groups:
+  - name: PROXY
+    type: url-test                  # automatic protocol failover: Reality primary, Hysteria2 backup
+    proxies:
+      - reality-tokyo
+      - hy2-tokyo
+    url: 'https://www.gstatic.com/generate_204'
+    interval: 300
+    tolerance: 100
+
+rules:
+  - GEOIP,private,DIRECT,no-resolve
+  - GEOSITE,category-ads-all,REJECT
+  - GEOSITE,cn,DIRECT
+  - GEOIP,CN,DIRECT,no-resolve
+  - MATCH,PROXY
