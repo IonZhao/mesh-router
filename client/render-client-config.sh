@@ -23,6 +23,10 @@ done
 : "${VPS_HOST:?Set VPS_HOST (VPS public IP) in secrets/vps.env}"
 : "${VLESS_UUID:?missing}"; : "${REALITY_HANDSHAKE:?missing}"; : "${REALITY_PUBLIC_KEY:?missing in secrets (printed by gen-secrets.sh)}"
 : "${REALITY_SHORT_ID:?missing}"; : "${PROXY_DOMAIN:?missing}"; : "${HY2_PASSWORD:?missing}"
+# CDN fallback is optional — default to harmless values so the rendered config stays valid (and the
+# proxy simply tests dead in the url-test group) when Cloudflare hasn't been set up yet.
+CDN_DOMAIN="${CDN_DOMAIN:-cdn.invalid}"
+CDN_WS_PATH="${CDN_WS_PATH:-cdnfallback}"
 
 sed -e "s|\${VPS_HOST}|$VPS_HOST|g" \
     -e "s|\${VLESS_UUID}|$VLESS_UUID|g" \
@@ -31,6 +35,8 @@ sed -e "s|\${VPS_HOST}|$VPS_HOST|g" \
     -e "s|\${REALITY_SHORT_ID}|$REALITY_SHORT_ID|g" \
     -e "s|\${PROXY_DOMAIN}|$PROXY_DOMAIN|g" \
     -e "s|\${HY2_PASSWORD}|$HY2_PASSWORD|g" \
+    -e "s|\${CDN_DOMAIN}|$CDN_DOMAIN|g" \
+    -e "s|\${CDN_WS_PATH}|$CDN_WS_PATH|g" \
     "$TPL" > "$OUT"
 
 echo "Wrote $OUT"

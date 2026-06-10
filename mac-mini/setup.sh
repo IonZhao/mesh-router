@@ -3,7 +3,7 @@
 # NOT docker-based (Docker-on-macOS is a Linux VM with poor networking); uses brew + launchd.
 # Idempotent: safe to re-run.
 #
-#   git clone <repo> && cd cross-border-net/mac-mini && ./setup.sh
+#   git clone <repo> && cd mesh-router/mac-mini && ./setup.sh
 #
 set -euo pipefail
 
@@ -13,10 +13,10 @@ SECRETS="$REPO_ROOT/secrets/mac.env"
 SECRETS_ENC="$REPO_ROOT/secrets/mac.env.enc"
 CONFIG_TPL="$SCRIPT_DIR/sing-box/config.json.template"
 CONFIG_OUT="$SCRIPT_DIR/sing-box/config.json"
-PLIST_TPL="$SCRIPT_DIR/launchd/com.crossborder.singbox.plist.template"
-PLIST_OUT="$SCRIPT_DIR/launchd/com.crossborder.singbox.plist"
-PLIST_DEST="/Library/LaunchDaemons/com.crossborder.singbox.plist"
-LOG_DIR="$HOME/Library/Logs/cross-border-net"
+PLIST_TPL="$SCRIPT_DIR/launchd/com.meshrouter.singbox.plist.template"
+PLIST_OUT="$SCRIPT_DIR/launchd/com.meshrouter.singbox.plist"
+PLIST_DEST="/Library/LaunchDaemons/com.meshrouter.singbox.plist"
+LOG_DIR="$HOME/Library/Logs/mesh-router"
 
 log() { printf '\033[1;34m[setup]\033[0m %s\n' "$*"; }
 die() { printf '\033[1;31m[setup] ERROR:\033[0m %s\n' "$*" >&2; exit 1; }
@@ -82,7 +82,7 @@ sudo chown root:wheel "$PLIST_DEST"
 sudo chmod 644 "$PLIST_DEST"
 sudo launchctl bootout system "$PLIST_DEST" 2>/dev/null || true
 sudo launchctl bootstrap system "$PLIST_DEST"
-sudo launchctl kickstart -k system/com.crossborder.singbox
+sudo launchctl kickstart -k system/com.meshrouter.singbox
 
 # 7. Power/availability hardening (a residential box must survive outages unattended).
 log "Applying power settings (sudo)..."
@@ -95,7 +95,7 @@ echo
 echo "  >> Copy this line into secrets/vps.env on the VPS side, then run the VPS bootstrap:"
 echo "       MAC_TAILSCALE_IP=$MAC_TAILSCALE_IP"
 echo
-echo "  Check status:  sudo launchctl print system/com.crossborder.singbox | grep state"
+echo "  Check status:  sudo launchctl print system/com.meshrouter.singbox | grep state"
 echo "  Logs:          tail -f $LOG_DIR/sing-box.err.log"
 echo "  Also enable in System Settings: Energy > 'Start up automatically after power failure',"
 echo "  and disable macOS automatic updates (defer to a manual window)."

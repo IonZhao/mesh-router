@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>cross-border-net — Deployment Guide</title>
+<title>mesh-router — Deployment Guide</title>
 <style>
   :root{
     --bg:#0f1419; --panel:#161b22; --panel2:#1c232c; --border:#2b333d;
@@ -72,7 +72,7 @@
 <div class="wrap">
 
 <header>
-  <h1>cross-border-net — Deployment Guide</h1>
+  <h1>mesh-router — Deployment Guide</h1>
   <p class="sub">Tokyo VPS control plane + US Mac mini residential exit. Follow top to bottom; check off each box as you go (progress is saved in this browser).</p>
 </header>
 
@@ -141,7 +141,7 @@
   <label class="check"><input type="checkbox" data-step><span><span class="check-title">A domain name</span><br><span class="check-body">Configured in Phase 1. ~$10/yr.</span></span></label>
   <label class="check"><input type="checkbox" data-step><span><span class="check-title">Tailscale account</span><br><span class="check-body">Free tier. Sign up at <a href="https://login.tailscale.com" target="_blank" rel="noopener">login.tailscale.com</a> (Google/GitHub/Microsoft login).</span></span></label>
   <label class="check"><input type="checkbox" data-step><span><span class="check-title">Tools on your laptop</span><br><span class="check-body">git, Docker (to run gen-secrets), and optionally <code>sops</code> + <code>age</code> (<code>brew install sops age</code>) for encrypted secrets in git.</span></span></label>
-  <div class="callout tip"><b>Tip:</b> clone the repo locally first — <code>git clone &lt;repo&gt; &amp;&amp; cd cross-border-net</code> — every command below assumes you're inside it.</div>
+  <div class="callout tip"><b>Tip:</b> clone the repo locally first — <code>git clone &lt;repo&gt; &amp;&amp; cd mesh-router</code> — every command below assumes you're inside it.</div>
 </section>
 
 <section id="p1">
@@ -207,7 +207,7 @@
 <section id="p4">
   <h2><span class="phase-num">4</span> Mac mini exit node</h2>
   <p class="lead">Do the Mac <b>before</b> the VPS — it prints its Tailscale IP, which the VPS needs. Run these <b>on the Mac mini</b>.</p>
-  <div class="codeblock"><button class="copy-btn">copy</button><pre><code>cd cross-border-net/mac-mini
+  <div class="codeblock"><button class="copy-btn">copy</button><pre><code>cd mesh-router/mac-mini
 ./setup.sh</code></pre></div>
   <p>The script: installs sing-box + tailscale via brew, joins the tailnet, detects the Mac's Tailscale IP, renders the sing-box config, installs a LaunchDaemon (auto-starts at boot), and applies power settings. At the end it prints a line like:</p>
   <div class="codeblock"><button class="copy-btn">copy</button><pre><code>MAC_TAILSCALE_IP=100.101.102.103</code></pre></div>
@@ -226,7 +226,7 @@
 sudo apt-get install -y gettext-base   # provides envsubst</code></pre></div>
   <h3>5b. Bootstrap</h3>
   <p>Get the code + secrets onto the VPS via git: clone the public repo, then clone your private secrets repo into <code>secrets/</code> (or restore your sops <code>.enc</code> files there). With the age key present, <code>bootstrap.sh</code> auto-decrypts. Then:</p>
-  <div class="codeblock"><button class="copy-btn">copy</button><pre><code>cd cross-border-net/vps
+  <div class="codeblock"><button class="copy-btn">copy</button><pre><code>cd mesh-router/vps
 ./bootstrap.sh</code></pre></div>
   <p>It validates secrets, renders <code>config.json</code>, checks it with <code>sing-box check</code>, and starts the stack. Confirm Tailscale joined:</p>
   <div class="codeblock"><button class="copy-btn">copy</button><pre><code>docker exec tailscale tailscale status</code></pre></div>
@@ -239,7 +239,7 @@ sudo apt-get install -y gettext-base   # provides envsubst</code></pre></div>
 <section id="p6">
   <h2><span class="phase-num">6</span> Firewall</h2>
   <p class="lead">Lock down everything except the proxy ports. Run <b>on the VPS</b>.</p>
-  <div class="codeblock"><button class="copy-btn">copy</button><pre><code>sudo cross-border-net/scripts/firewall.sh</code></pre></div>
+  <div class="codeblock"><button class="copy-btn">copy</button><pre><code>sudo mesh-router/scripts/firewall.sh</code></pre></div>
   <p>After this, only <code>443/tcp</code>, <code>8443/udp</code>, <code>80/tcp</code> (ACME), and <code>22/tcp</code> (SSH) are public. The dashboards (9090/19999/3001/8685) are reachable only over Tailscale.</p>
   <label class="check"><input type="checkbox" data-step><span><span class="check-title">Firewall applied</span></span></label>
 </section>
@@ -247,7 +247,7 @@ sudo apt-get install -y gettext-base   # provides envsubst</code></pre></div>
 <section id="p7">
   <h2><span class="phase-num">7</span> Client config</h2>
   <p class="lead">Render the Clash Meta config (on any machine with the secrets), then import it into your China-side client.</p>
-  <div class="codeblock"><button class="copy-btn">copy</button><pre><code>cd cross-border-net/client
+  <div class="codeblock"><button class="copy-btn">copy</button><pre><code>cd mesh-router/client
 ./render-client-config.sh   # writes clash-meta.yaml</code></pre></div>
   <p>Import <code>clash-meta.yaml</code> into a Clash Meta / mihomo client:</p>
   <ul>
@@ -295,7 +295,7 @@ sudo apt-get install -y gettext-base   # provides envsubst</code></pre></div>
       <li>Update the DNS A record <code>proxy.yourdomain.com</code> → new IP, and <code>VPS_HOST</code> in <code>secrets/vps.env</code>.</li>
       <li>Re-render the client config (<code>client/render-client-config.sh</code>) and re-import. Reality reconnects by IP.</li>
     </ol>
-    <p>Insurance against this: the optional Cloudflare CDN-over-WebSocket path (design doc §4.1) survives IP blocking entirely.</p>
+    <p>Insurance against this: enable the <b>Cloudflare CDN fallback</b> (see <code>docs/cloudflare-fallback.md</code>) ahead of time — it survives the VPS IP being blocked entirely, because the client reaches Cloudflare's edge (not your VPS) and CF reaches the origin from outside the GFW. The VPS side ships ready; it's ~10 min of Cloudflare dashboard setup.</p>
     </div>
   </details>
   <details>
@@ -304,7 +304,7 @@ sudo apt-get install -y gettext-base   # provides envsubst</code></pre></div>
     <ul>
       <li>You're not offline — <code>mac-auto</code> already failed sensitive traffic over to the VPS direct exit (Uptime Kuma should have alerted you).</li>
       <li>SSH in over Tailscale (works even with the data path dead): <code>ssh you@mac-mini-exit</code>.</li>
-      <li>Re-run <code>mac-mini/setup.sh</code> to rebuild. Inspect the daemon: <code>sudo launchctl print system/com.crossborder.singbox | grep state</code> and logs at <code>~/Library/Logs/cross-border-net/</code>.</li>
+      <li>Re-run <code>mac-mini/setup.sh</code> to rebuild. Inspect the daemon: <code>sudo launchctl print system/com.meshrouter.singbox | grep state</code> and logs at <code>~/Library/Logs/mesh-router/</code>.</li>
     </ul>
     </div>
   </details>
@@ -330,7 +330,7 @@ sudo apt-get install -y gettext-base   # provides envsubst</code></pre></div>
 </section>
 
 <footer>
-  cross-border-net · operational guide · canonical reference is <code>README.md</code> · design rationale in <code>../docs/2026-06-10-cross-border-network-design.md</code>
+  mesh-router · operational guide · canonical reference is <code>README.md</code> · design rationale in <code>../docs/2026-06-10-mesh-routerwork-design.md</code>
 </footer>
 
 </div>

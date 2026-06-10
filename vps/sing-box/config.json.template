@@ -65,6 +65,26 @@
           "data_directory": "/etc/sing-box/acme"
         }
       }
+    },
+    {
+      "type": "vless",
+      "tag": "vless-ws-cdn-in",
+      "listen": "::",
+      "listen_port": 2053,
+      "sniff": true,
+      "sniff_override_destination": false,
+      "users": [
+        { "uuid": "${VLESS_UUID}" }
+      ],
+      "tls": {
+        "enabled": true,
+        "certificate_path": "/etc/sing-box/acme/cdn-selfsigned.crt",
+        "key_path": "/etc/sing-box/acme/cdn-selfsigned.key"
+      },
+      "transport": {
+        "type": "ws",
+        "path": "/${CDN_WS_PATH}"
+      }
     }
   ],
   "outbounds": [

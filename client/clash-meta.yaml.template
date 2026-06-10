@@ -36,7 +36,7 @@ dns:
     - https://223.5.5.5/dns-query
 
 proxies:
-  - name: reality-tokyo
+  - name: reality-vps
     type: vless
     server: ${VPS_HOST}             # VPS public IP (Reality connects by IP)
     port: 443
@@ -51,7 +51,7 @@ proxies:
       public-key: ${REALITY_PUBLIC_KEY}
       short-id: ${REALITY_SHORT_ID}
 
-  - name: hy2-tokyo
+  - name: hy2-vps
     type: hysteria2
     server: ${PROXY_DOMAIN}         # Hysteria2 connects by domain (real TLS cert)
     port: 8443
@@ -60,12 +60,30 @@ proxies:
     alpn:
       - h3
 
+  # Optional emergency path — survives the VPS IP being GFW-blocked: the client only ever talks to
+  # Cloudflare's edge IPs, and Cloudflare reaches your origin from outside the GFW. Stays dead in the
+  # url-test group until you set it up (docs/cloudflare-fallback.md), so it's harmless to ship enabled.
+  - name: cdn-fallback
+    type: vless
+    server: ${CDN_DOMAIN}           # Cloudflare-proxied (orange-cloud) subdomain
+    port: 2053                      # Cloudflare-supported HTTPS port; CF forwards to origin :2053
+    uuid: ${VLESS_UUID}
+    tls: true
+    servername: ${CDN_DOMAIN}
+    network: ws
+    ws-opts:
+      path: /${CDN_WS_PATH}
+      headers:
+        Host: ${CDN_DOMAIN}
+    client-fingerprint: chrome
+
 proxy-groups:
   - name: PROXY
-    type: url-test                  # automatic protocol failover: Reality primary, Hysteria2 backup
+    type: url-test                  # automatic failover: Reality primary, Hysteria2 backup, CDN last resort
     proxies:
-      - reality-tokyo
-      - hy2-tokyo
+      - reality-vps
+      - hy2-vps
+      - cdn-fallback
     url: 'https://www.gstatic.com/generate_204'
     interval: 300
     tolerance: 100

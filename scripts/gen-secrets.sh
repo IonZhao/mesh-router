@@ -47,6 +47,7 @@ MAC_VLESS_UUID="$(sb generate uuid)"
 REALITY_SHORT_ID="$(sb generate rand 8 --hex)"
 HY2_PASSWORD="$(sb generate rand 24 --hex)"
 CLASH_API_SECRET="$(sb generate rand 24 --hex)"
+CDN_WS_PATH="$(sb generate rand 12 --hex)"   # secret WebSocket path for the Cloudflare CDN fallback
 
 KP="$(sb generate reality-keypair)"
 REALITY_PRIVATE_KEY="$(printf '%s\n' "$KP" | awk -F': *' '/PrivateKey/{print $2}')"
@@ -60,6 +61,7 @@ set_kv REALITY_SHORT_ID    "$REALITY_SHORT_ID"    "$VPS_ENV"
 set_kv HY2_PASSWORD        "$HY2_PASSWORD"        "$VPS_ENV"
 set_kv MAC_VLESS_UUID      "$MAC_VLESS_UUID"      "$VPS_ENV"
 set_kv CLASH_API_SECRET    "$CLASH_API_SECRET"    "$VPS_ENV"
+set_kv CDN_WS_PATH         "$CDN_WS_PATH"         "$VPS_ENV"
 
 # Mac side (shared UUID + the public key for client reference).
 set_kv MAC_VLESS_UUID      "$MAC_VLESS_UUID"      "$MAC_ENV"
@@ -78,6 +80,7 @@ Reality PUBLIC key (goes into the client config; safe to share):
 
 STILL TO FILL IN BY HAND:
   secrets/vps.env : PROXY_DOMAIN, ACME_EMAIL, REALITY_HANDSHAKE, TS_AUTHKEY, VPS_HOST, MAC_TAILSCALE_IP
+  secrets/vps.env : CDN_DOMAIN   (optional — only if enabling the Cloudflare CDN fallback; see docs/cloudflare-fallback.md)
   secrets/mac.env : TS_AUTHKEY   (a separate Tailscale auth key for the Mac node)
 
 Then encrypt for git (optional but recommended):

@@ -2,7 +2,7 @@
 # VPS bootstrap — fresh Debian/Ubuntu machine -> running proxy stack.
 # Idempotent: safe to re-run after editing config or rotating secrets.
 #
-#   git clone <repo> && cd cross-border-net/vps && ./bootstrap.sh
+#   git clone <repo> && cd mesh-router/vps && ./bootstrap.sh
 #
 set -euo pipefail
 
@@ -35,7 +35,7 @@ fi
 set -a; # shellcheck disable=SC1090
 source "$SECRETS"; set +a
 REQUIRED=(PROXY_DOMAIN ACME_EMAIL REALITY_HANDSHAKE MAC_TAILSCALE_IP TS_AUTHKEY \
-          VLESS_UUID REALITY_PRIVATE_KEY REALITY_SHORT_ID HY2_PASSWORD MAC_VLESS_UUID CLASH_API_SECRET)
+          VLESS_UUID REALITY_PRIVATE_KEY REALITY_SHORT_ID HY2_PASSWORD MAC_VLESS_UUID CLASH_API_SECRET CDN_WS_PATH)
 for v in "${REQUIRED[@]}"; do
   [[ -n "${!v:-}" ]] || die "Required secret '$v' is empty in secrets/vps.env"
 done
@@ -43,16 +43,29 @@ case "$MAC_TAILSCALE_IP" in 100.x.*) die "MAC_TAILSCALE_IP is still a placeholde
 
 # 4. Render config.json from the template (only our known vars are substituted).
 command -v envsubst >/dev/null 2>&1 || die "envsubst not found. Install: apt-get install -y gettext-base"
-VARS='$PROXY_DOMAIN $ACME_EMAIL $REALITY_HANDSHAKE $MAC_TAILSCALE_IP $VLESS_UUID $REALITY_PRIVATE_KEY $REALITY_SHORT_ID $HY2_PASSWORD $MAC_VLESS_UUID $CLASH_API_SECRET'
+VARS='$PROXY_DOMAIN $ACME_EMAIL $REALITY_HANDSHAKE $MAC_TAILSCALE_IP $VLESS_UUID $REALITY_PRIVATE_KEY $REALITY_SHORT_ID $HY2_PASSWORD $MAC_VLESS_UUID $CLASH_API_SECRET $CDN_WS_PATH'
 log "Rendering sing-box/config.json from template..."
 envsubst "$VARS" < "$TEMPLATE" > "$RENDERED"
 
 # 5. Data directories for persisted volumes.
 mkdir -p "$SCRIPT_DIR"/data/{sing-box,tailscale,netdata/config,netdata/lib,netdata/cache,uptime-kuma,vnstat} "$SCRIPT_DIR/acme"
 
+# 5b. Self-signed cert for the optional Cloudflare CDN fallback inbound (port 2053).
+#     Cloudflare "Full" mode encrypts CF<->origin but does NOT validate the cert, so self-signed
+#     is fine. The inbound just sits dark until you point Cloudflare at it (see docs/cloudflare-fallback.md).
+if [[ ! -f "$SCRIPT_DIR/acme/cdn-selfsigned.crt" ]]; then
+  command -v openssl >/dev/null 2>&1 || die "openssl not found (apt-get install -y openssl) — needed for the CDN fallback cert."
+  log "Generating self-signed cert for the CDN fallback inbound..."
+  openssl req -x509 -newkey rsa:2048 -nodes -days 3650 \
+    -keyout "$SCRIPT_DIR/acme/cdn-selfsigned.key" \
+    -out "$SCRIPT_DIR/acme/cdn-selfsigned.crt" \
+    -subj "/CN=cdn.local" >/dev/null 2>&1 || die "openssl cert generation failed."
+fi
+
 # 6. Validate the rendered config before starting.
 log "Validating sing-box config..."
 docker run --rm -v "$SCRIPT_DIR/sing-box/config.json:/c.json:ro" -v "$SCRIPT_DIR/rulesets:/etc/sing-box/rulesets:ro" \
+  -v "$SCRIPT_DIR/acme:/etc/sing-box/acme:ro" \
   "ghcr.io/sagernet/sing-box:${SINGBOX_VERSION:-v1.11.14}" check -c /c.json \
   || die "sing-box config validation failed (see output above)."
 

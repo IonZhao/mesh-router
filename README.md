@@ -1,18 +1,18 @@
-# cross-border-net
+# mesh-router
 
-Personal two-layer cross-border network. **Tokyo VPS = control plane** (sing-box, the single
+Personal two-layer cross-border network. **VPS = control plane** (sing-box, the single
 routing brain). **US Mac mini = trusted residential exit** (sing-box, pure egress, zero routing).
 Client = Clash Meta doing geo split only. Connected by Tailscale (application-layer chaining, not
 L3 NAT). Fully reproducible from this repo.
 
-> Design rationale and decision log: [`../docs/2026-06-10-cross-border-network-design.md`](../docs/2026-06-10-cross-border-network-design.md)
+> Design rationale and decision log: [`../docs/2026-06-10-mesh-routerwork-design.md`](../docs/2026-06-10-mesh-routerwork-design.md)
 > **New to this? Use the click-by-click walkthrough:** [`docs/deploy-guide.html`](docs/deploy-guide.html) (open in a browser).
 
 ```
 Client (China, Clash Meta)        geo split: CN -> direct, else -> VPS
    │  VLESS+Reality :443 (primary) / Hysteria2 :8443 (backup)
    ▼
-VPS (Tokyo, sing-box)             trust split: sensitive -> trusted-exit, else -> direct
+VPS (any region, sing-box)        trust split: sensitive -> trusted-exit, else -> direct
    ├── direct  (datacenter egress)
    └── mac-out (VLESS over Tailscale)
           ▼
@@ -50,13 +50,15 @@ VPS (Tokyo, sing-box)             trust split: sensitive -> trusted-exit, else -
 | `client/clash-meta.yaml.template` | fake-ip, CN-direct, Reality/Hysteria2 url-test group |
 | `scripts/gen-secrets.sh` | generate UUIDs, Reality keypair, passwords |
 | `scripts/firewall.sh` | ufw: only proxy ports public; admin via Tailscale only |
+| `scripts/firewall-cdn.sh` | open the CDN fallback port (2053) to Cloudflare IPs only (optional) |
 | `scripts/check-tailscale-direct.sh` | alert if the VPS↔Mac link drops to a DERP relay |
+| `docs/cloudflare-fallback.md` | optional emergency path that survives the VPS IP being blocked |
 | `secrets/*.env.example` | secret templates (real secrets live OUTSIDE this repo — see "Code delivery & disaster recovery") |
 
 ## Quickstart
 
 ```bash
-git clone <repo> && cd cross-border-net
+git clone <repo> && cd mesh-router
 
 # 1. Generate secrets (needs Docker), then fill in the human fields it lists.
 scripts/gen-secrets.sh
@@ -154,10 +156,12 @@ interval 60s, plus a notification. Optionally cron `scripts/check-tailscale-dire
 
 ### A. VPS IP blocked (most likely disaster — target < 30 min)
 1. Provision a new VPS (or request an IP swap).
-2. `git clone <repo> && cd cross-border-net/vps && ./bootstrap.sh` (secrets come from the sops file or your fill-in).
+2. `git clone <repo> && cd mesh-router/vps && ./bootstrap.sh` (secrets come from the sops file or your fill-in).
 3. Update the DNS A record for `PROXY_DOMAIN` → new IP, and `VPS_HOST` in `secrets/vps.env`.
 4. Re-render and re-import the client config (`client/render-client-config.sh`). Reality reconnects by IP.
-- *Insurance:* the optional Cloudflare CDN path (see design doc §4.1) survives IP blocking entirely.
+- *Insurance:* enable the [Cloudflare CDN fallback](docs/cloudflare-fallback.md) ahead of time — it
+  survives the VPS IP being blocked entirely (the client reaches Cloudflare's edge, not your VPS, and
+  CF reaches the origin from outside the GFW). The VPS side ships ready; setup is ~10 min of CF clicks.
 
 ### B. Switch residential ↔ VPS-direct
 See "Two exit modes" above — one click in the dashboard.
@@ -165,7 +169,7 @@ See "Two exit modes" above — one click in the dashboard.
 ### C. Mac mini down / recovery
 - The `mac-auto` selector already failed sensitive traffic over to the VPS; you're not offline.
 - SSH in over Tailscale (out-of-band): `ssh you@mac-mini-exit` (works even when the data path is dead).
-- Re-run `mac-mini/setup.sh` to rebuild. Check the daemon: `sudo launchctl print system/com.crossborder.singbox`.
+- Re-run `mac-mini/setup.sh` to rebuild. Check the daemon: `sudo launchctl print system/com.meshrouter.singbox`.
 
 ## Security notes
 

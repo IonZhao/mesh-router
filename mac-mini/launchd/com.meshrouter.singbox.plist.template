@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.crossborder.singbox</string>
+    <string>com.meshrouter.singbox</string>
 
     <key>ProgramArguments</key>
     <array>
