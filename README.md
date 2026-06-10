@@ -26,9 +26,11 @@ VPS (Tokyo, sing-box)             trust split: sensitive -> trusted-exit, else -
 - **A domain you own.** Required for Hysteria2's TLS cert (auto-issued via Let's Encrypt) and
   the dashboards. ~$10/yr. Point an A record (e.g. `proxy.yourdomain.com`) at the VPS IP. Reality
   (port 443) does *not* use your domain — it borrows a real site's TLS handshake.
-- **A VPS in Tokyo.** 2 vCPU / 2–4 GB RAM / ≥2 TB traffic is plenty (a proxy hub is network-bound,
-  not CPU-bound). Spend the budget on route quality (Softbank/IIJ peering or CN2 GIA), not cores.
-  Debian/Ubuntu.
+- **A VPS — region is your call.** Tokyo gives the lowest everyday-browsing latency from China;
+  a US-West box (CN2 GIA) shortens the hop to the US residential exit, better if AI traffic
+  dominates. Either works — the configs are region-agnostic; just set `VPS_HOSTNAME` in `.env`.
+  2 vCPU / 2–4 GB RAM / ≥2 TB traffic is plenty (a proxy hub is network-bound, not CPU-bound) —
+  spend the budget on route quality, not cores. Debian/Ubuntu.
 - **A Mac mini on a US residential connection**, powered on and online.
 - **A Tailscale account** (free tier is fine) — used as the private link *and* the out-of-band
   rescue channel to the Mac.
@@ -49,7 +51,7 @@ VPS (Tokyo, sing-box)             trust split: sensitive -> trusted-exit, else -
 | `scripts/gen-secrets.sh` | generate UUIDs, Reality keypair, passwords |
 | `scripts/firewall.sh` | ufw: only proxy ports public; admin via Tailscale only |
 | `scripts/check-tailscale-direct.sh` | alert if the VPS↔Mac link drops to a DERP relay |
-| `secrets/*.env.example` | secret templates (real secrets gitignored / sops-encrypted) |
+| `secrets/*.env.example` | secret templates (real secrets live OUTSIDE this repo — see "Code delivery & disaster recovery") |
 
 ## Quickstart
 
@@ -76,6 +78,45 @@ cd client && ./render-client-config.sh   # produces clash-meta.yaml -> import in
 ```
 
 Validate before/after: `docker compose run --rm sing-box check -c /etc/sing-box/config.json`.
+
+## Code delivery & disaster recovery
+
+Both machines get the code by **cloning this repo with git** — that's the whole reproducibility
+story. Secrets are the one thing that must NOT live in a public repo, so they travel separately.
+
+**Two-repo model (recommended if you open-source this):**
+
+| Repo | Visibility | Contents | How it reaches a machine |
+|---|---|---|---|
+| `<this-repo>` | public OK | all code, templates, examples, docs — **no real secrets, no real domain/IP** | `git clone https://github.com/<you>/<repo>` |
+| `<this-repo>-secrets` | **private** | your `secrets/vps.env.enc` + `secrets/mac.env.enc` (sops-encrypted) | `git clone git@github.com:<you>/<repo>-secrets secrets-private` then copy/symlink into `secrets/`, or clone directly into `secrets/` |
+
+The real `PROXY_DOMAIN`, `VPS_HOST`, keys, and passwords exist **only** in the private secrets
+(or your password manager). That's why the public repo is safe to publish as-is.
+
+**Full recovery from scratch (e.g. rebuilding a wiped VPS):**
+
+```bash
+git clone https://github.com/<you>/<repo> && cd <repo>
+git clone git@github.com:<you>/<repo>-secrets secrets   # or restore your sops .enc files into secrets/
+export SOPS_AGE_KEY_FILE=~/.config/sops/age/keys.txt     # the age private key from your password manager
+cd vps && ./bootstrap.sh                                  # bootstrap auto-decrypts *.env.enc via sops
+sudo ../scripts/firewall.sh
+```
+
+Same on the Mac: `git clone … && cd mac-mini && ./setup.sh`. With the age key in hand, **clone +
+one command = a fully restored node** — no manual file copying, nothing to remember.
+
+**Private-repo access on a server** (for `git clone`/`git pull` of a private repo): add a GitHub
+**deploy key** (read-only SSH key per machine) or a fine-grained PAT. Don't reuse your personal key.
+
+**Updating after you change configs:** commit & push, then on each machine
+`git pull && ./bootstrap.sh` (VPS) or `git pull && ./setup.sh` (Mac). Both scripts are idempotent —
+they re-render configs and recreate only what changed.
+
+> Simpler alternative if you're *not* open-sourcing yet: keep one **private** mono-repo with the
+> sops `.enc` files committed in `secrets/` (flip the `.gitignore` rule back to allow `*.enc`). Then
+> `git clone` alone restores everything. Split out a sanitized public repo later when you're ready.
 
 ## Two exit modes (switch at runtime, no redeploy)
 
@@ -129,8 +170,9 @@ See "Two exit modes" above — one click in the dashboard.
 ## Security notes
 
 - Only 443/tcp, 8443/udp, 80/tcp (ACME) are public. Everything else is Tailscale-gated by `firewall.sh`.
-- Secrets never enter git in plaintext: `secrets/*.env` is gitignored; commit only the sops-encrypted
-  `*.env.enc`. With `sops`+`age`, `git clone` + one private key = a complete rebuild.
+- Secrets never enter this (public) repo at all: `secrets/` is fully gitignored except `*.example`.
+  Real secrets live in a separate private repo / password manager (see "Code delivery & disaster
+  recovery"). The real domain and IP exist only there, so this repo is safe to open-source as-is.
 - Reality private key, Hysteria2 password, Tailscale auth keys, and the Clash API secret are all
   generated by `gen-secrets.sh` — never reuse the examples.
 - Tighten SSH to Tailscale-only once you've confirmed Tailscale SSH works (see `firewall.sh`).

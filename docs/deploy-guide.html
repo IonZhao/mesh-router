@@ -110,7 +110,7 @@
     <text x="85" y="131" fill="#8b98a5" font-size="11" text-anchor="middle">Clash Meta · geo split</text>
 
     <rect x="250" y="70" width="180" height="96" rx="10" fill="#1c232c" stroke="#4493f8"/>
-    <text x="340" y="92" fill="#e6edf3" font-size="13" text-anchor="middle" font-weight="700">VPS (Tokyo)</text>
+    <text x="340" y="92" fill="#e6edf3" font-size="13" text-anchor="middle" font-weight="700">VPS (any region)</text>
     <text x="340" y="110" fill="#8b98a5" font-size="11" text-anchor="middle">sing-box · routing brain</text>
     <text x="340" y="128" fill="#8b98a5" font-size="11" text-anchor="middle">Reality :443 / Hy2 :8443</text>
     <text x="340" y="148" fill="#3fb950" font-size="11" text-anchor="middle">trusted-exit selector</text>
@@ -136,7 +136,7 @@
 <section id="p0">
   <h2><span class="phase-num">0</span> Shopping list & prerequisites</h2>
   <p class="lead">Get these before touching any config. Total recurring cost ≈ VPS ($10–20/mo) + domain (~$10/yr); Tailscale + Mac mini you already have.</p>
-  <label class="check"><input type="checkbox" data-step><span><span class="check-title">VPS in Tokyo</span><br><span class="check-body">2 vCPU / 2–4 GB RAM / ≥2 TB traffic, Debian 12 or Ubuntu 22.04+. Prioritize a good China route (Softbank/IIJ peering or CN2 GIA) over CPU. Providers: Vultr, BandwagonHost CN2 GIA, or a JP cloud.</span></span></label>
+  <label class="check"><input type="checkbox" data-step><span><span class="check-title">VPS — region is your choice</span><br><span class="check-body">Tokyo = lowest everyday-browsing latency; US-West (CN2 GIA) = shorter hop to the US exit if AI traffic dominates. Either works (configs are region-agnostic; set <code>VPS_HOSTNAME</code> in <code>.env</code>). 2 vCPU / 2–4 GB RAM / ≥2 TB traffic, Debian 12 or Ubuntu 22.04+. Prioritize route quality over CPU. Providers: Vultr, BandwagonHost CN2 GIA, or a JP/US cloud.</span></span></label>
   <label class="check"><input type="checkbox" data-step><span><span class="check-title">Mac mini on US residential internet</span><br><span class="check-body">Any recent model. Plugged into home/office broadband (not a datacenter). Admin account with <code>sudo</code>.</span></span></label>
   <label class="check"><input type="checkbox" data-step><span><span class="check-title">A domain name</span><br><span class="check-body">Configured in Phase 1. ~$10/yr.</span></span></label>
   <label class="check"><input type="checkbox" data-step><span><span class="check-title">Tailscale account</span><br><span class="check-body">Free tier. Sign up at <a href="https://login.tailscale.com" target="_blank" rel="noopener">login.tailscale.com</a> (Google/GitHub/Microsoft login).</span></span></label>
@@ -199,7 +199,7 @@
     <tr><td><code>MAC_TAILSCALE_IP</code></td><td>leave as placeholder — Phase 4 fills it</td></tr>
   </table>
   <p>And in <code>secrets/mac.env</code>, set <code>TS_AUTHKEY</code> = auth key #2.</p>
-  <div class="callout tip"><b>Optional — encrypt for git:</b> after editing, <code>sops -e secrets/vps.env &gt; secrets/vps.env.enc</code> (same for mac.env). Commit only the <code>.enc</code> files. See <code>.sops.yaml</code> for the one-time age key setup.</div>
+  <div class="callout tip"><b>Encrypt for git (recommended):</b> after editing, <code>sops -e secrets/vps.env &gt; secrets/vps.env.enc</code> (same for mac.env). Keep these <code>.enc</code> files in a <b>separate private repo</b> (or your password manager) — NOT in this public repo. See <code>.sops.yaml</code> for the one-time age key setup, and the README's "Code delivery &amp; disaster recovery".</div>
   <label class="check"><input type="checkbox" data-step><span><span class="check-title">Ran gen-secrets.sh</span></span></label>
   <label class="check"><input type="checkbox" data-step><span><span class="check-title">Filled human fields in secrets/vps.env and secrets/mac.env</span></span></label>
 </section>
@@ -225,7 +225,7 @@
   <div class="codeblock"><button class="copy-btn">copy</button><pre><code>curl -fsSL https://get.docker.com | sudo sh
 sudo apt-get install -y gettext-base   # provides envsubst</code></pre></div>
   <h3>5b. Bootstrap</h3>
-  <p>Get the repo + secrets onto the VPS (git clone, or scp your filled-in <code>secrets/</code>, or commit the sops <code>.enc</code> files and let bootstrap decrypt). Then:</p>
+  <p>Get the code + secrets onto the VPS via git: clone the public repo, then clone your private secrets repo into <code>secrets/</code> (or restore your sops <code>.enc</code> files there). With the age key present, <code>bootstrap.sh</code> auto-decrypts. Then:</p>
   <div class="codeblock"><button class="copy-btn">copy</button><pre><code>cd cross-border-net/vps
 ./bootstrap.sh</code></pre></div>
   <p>It validates secrets, renders <code>config.json</code>, checks it with <code>sing-box check</code>, and starts the stack. Confirm Tailscale joined:</p>

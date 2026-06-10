@@ -40,7 +40,7 @@ services:
     environment:
       - TS_STATE_DIR=/var/lib/tailscale
       - TS_USERSPACE=false
-      - TS_HOSTNAME=tokyo-vps
+      - TS_HOSTNAME=${VPS_HOSTNAME:-cbn-vps}
       - TS_EXTRA_ARGS=--accept-dns=false
     volumes:
       - ./data/tailscale:/var/lib/tailscale

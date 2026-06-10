@@ -1,6 +1,10 @@
-# Decrypted secrets — NEVER commit. Only the *.enc (sops) and *.example versions are tracked.
-secrets/*.env
-!secrets/*.env.example
+# Secrets — this is an OPEN-SOURCE / public repo, so NOTHING real is committed here,
+# not even sops-encrypted files. Only the *.example templates are tracked. Keep your
+# real secrets (the sops .enc files or plaintext .env) in a SEPARATE private repo or a
+# password manager, and clone/restore them into secrets/ at deploy time. See README
+# "Code delivery & disaster recovery".
+secrets/*
+!secrets/*.example
 
 # Rendered configs (produced from *.template by bootstrap/setup via envsubst).
 vps/sing-box/config.json
