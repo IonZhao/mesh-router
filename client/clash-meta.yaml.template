@@ -14,7 +14,7 @@ ipv6: false
 unified-delay: true
 tcp-concurrent: true
 find-process-mode: 'off'
-global-client-fingerprint: chrome
+# Per-proxy client-fingerprint is set on each TLS proxy below (mihomo deprecated the global key).
 
 profile:
   store-selected: true

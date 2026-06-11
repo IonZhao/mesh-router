@@ -70,8 +70,10 @@ docker run --rm -v "$SCRIPT_DIR/sing-box/config.json:/c.json:ro" -v "$SCRIPT_DIR
   || die "sing-box config validation failed (see output above)."
 
 # 7. Up.
+#    --env-file points at the repo-root .env (image tags etc.); compose's default .env
+#    lookup is the cwd (vps/), which has none — without this the *_VERSION vars are blank.
 log "Starting stack..."
-( cd "$SCRIPT_DIR" && docker compose up -d )
+( cd "$SCRIPT_DIR" && docker compose --env-file "$REPO_ROOT/.env" up -d )
 
 log "Done. Next:"
 echo "  - Check Tailscale joined:   docker exec tailscale tailscale status"

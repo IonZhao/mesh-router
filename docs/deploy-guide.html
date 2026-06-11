@@ -161,14 +161,15 @@
   <p>Once you have the VPS's public IP (from your VPS provider's dashboard), create an <b>A record</b>:</p>
   <table>
     <tr><th>Type</th><th>Name</th><th>Content</th><th>Proxy status</th></tr>
-    <tr><td>A</td><td><code>proxy</code></td><td>your VPS IP, e.g. <code>203.0.113.45</code></td><td><b>DNS only</b> (grey cloud)</td></tr>
+    <tr><td>A</td><td><code>static</code></td><td>your VPS IP, e.g. <code>203.0.113.45</code></td><td><b>DNS only</b> (grey cloud)</td></tr>
   </table>
   <div class="callout danger"><b>Critical:</b> set proxy status to <b>DNS only / grey cloud</b>, NOT proxied/orange. Hysteria2 is UDP, and Cloudflare's proxy doesn't pass arbitrary UDP — orange cloud would break it. (The orange cloud is only for the optional CDN-over-WebSocket fallback, which is a separate record.)</div>
-  <p>This gives you <code>proxy.yourdomain.com</code> → your VPS. That hostname is your <code>PROXY_DOMAIN</code>.</p>
+  <p>This gives you <code>static.yourdomain.com</code> → your VPS. That hostname is your <code>PROXY_DOMAIN</code>.</p>
+  <div class="callout warn"><b>Pick a boring subdomain.</b> Avoid names like <code>proxy</code>, <code>vpn</code>, or <code>tunnel</code> — the hostname appears in public Certificate Transparency logs (every Let's Encrypt cert is logged forever), in the Hysteria2 TLS SNI on the wire, and in DNS queries, where keyword scanners flag obvious names. Boring names like <code>static</code>, <code>cdn</code>, <code>assets</code>, or <code>img</code> blend in as ordinary web infrastructure. (Reality on <code>:443</code> borrows a real site's handshake and never exposes your domain — only the Hysteria2 path does.)</div>
 
   <label class="check"><input type="checkbox" data-step><span><span class="check-title">Domain registered</span></span></label>
-  <label class="check"><input type="checkbox" data-step><span><span class="check-title">A record <code>proxy.yourdomain.com</code> → VPS IP, set to DNS-only</span></span></label>
-  <label class="check"><input type="checkbox" data-step><span><span class="check-title">Verified it resolves</span><br><span class="check-body">From any machine: <code>nslookup proxy.yourdomain.com</code> should return your VPS IP (may take a few minutes to propagate).</span></span></label>
+  <label class="check"><input type="checkbox" data-step><span><span class="check-title">A record <code>static.yourdomain.com</code> → VPS IP, set to DNS-only</span></span></label>
+  <label class="check"><input type="checkbox" data-step><span><span class="check-title">Verified it resolves</span><br><span class="check-body">From any machine: <code>nslookup static.yourdomain.com</code> should return your VPS IP (may take a few minutes to propagate).</span></span></label>
 </section>
 
 <section id="p2">
@@ -191,7 +192,7 @@
   <p>Then open <code>secrets/vps.env</code> and fill in the human fields:</p>
   <table>
     <tr><th>Field</th><th>Value</th></tr>
-    <tr><td><code>PROXY_DOMAIN</code></td><td><code>proxy.yourdomain.com</code> (from Phase 1)</td></tr>
+    <tr><td><code>PROXY_DOMAIN</code></td><td><code>static.yourdomain.com</code> (from Phase 1)</td></tr>
     <tr><td><code>ACME_EMAIL</code></td><td>your email (Let's Encrypt notices)</td></tr>
     <tr><td><code>REALITY_HANDSHAKE</code></td><td><code>www.microsoft.com</code> (a TLS1.3 site to impersonate; the default is fine)</td></tr>
     <tr><td><code>VPS_HOST</code></td><td>your VPS public IP (Reality connects by IP)</td></tr>
@@ -230,7 +231,7 @@ sudo apt-get install -y gettext-base   # provides envsubst</code></pre></div>
 ./bootstrap.sh</code></pre></div>
   <p>It validates secrets, renders <code>config.json</code>, checks it with <code>sing-box check</code>, and starts the stack. Confirm Tailscale joined:</p>
   <div class="codeblock"><button class="copy-btn">copy</button><pre><code>docker exec tailscale tailscale status</code></pre></div>
-  <div class="callout warn"><b>Hysteria2 cert:</b> on first start sing-box requests a Let's Encrypt cert over port 80 (HTTP-01). It needs <code>proxy.yourdomain.com</code> to resolve to this VPS and port 80 reachable (the firewall in Phase 6 allows it). If the cert fails, check the sing-box logs: <code>docker logs sing-box</code>.</div>
+  <div class="callout warn"><b>Hysteria2 cert:</b> on first start sing-box requests a Let's Encrypt cert over port 80 (HTTP-01). It needs <code>static.yourdomain.com</code> to resolve to this VPS and port 80 reachable (the firewall in Phase 6 allows it). If the cert fails, check the sing-box logs: <code>docker logs sing-box</code>.</div>
   <label class="check"><input type="checkbox" data-step><span><span class="check-title">Docker installed</span></span></label>
   <label class="check"><input type="checkbox" data-step><span><span class="check-title">bootstrap.sh completed (stack up)</span></span></label>
   <label class="check"><input type="checkbox" data-step><span><span class="check-title">Tailscale shows the VPS + Mac as peers</span></span></label>
@@ -265,6 +266,7 @@ sudo apt-get install -y gettext-base   # provides envsubst</code></pre></div>
   <p class="lead">Open the dashboard over Tailscale (use the VPS's Tailscale IP — <code>tailscale ip -4</code> on the VPS):</p>
   <div class="codeblock"><button class="copy-btn">copy</button><pre><code>http://&lt;vps-tailscale-ip&gt;:9090/ui</code></pre></div>
   <p>The secret is your <code>CLASH_API_SECRET</code> (in <code>secrets/vps.env</code>).</p>
+  <div class="callout warn"><b>"Failed to connect to the backend"?</b> metacubexd runs in <i>your browser</i>, so the <b>Endpoint URL</b> field is where your browser connects — and it defaults to <code>http://127.0.0.1:9090</code>, which is your own machine (no backend there). Change it to <code>http://&lt;vps-tailscale-ip&gt;:9090</code> — the same IP you opened this page with. The backend listens on <code>0.0.0.0:9090</code> but the firewall only allows it over Tailscale, so use the Tailscale IP, not the public one.</div>
   <h3>Checks</h3>
   <label class="check"><input type="checkbox" data-step><span><span class="check-title">Residential exit is live</span><br><span class="check-body">With the client connected, open <a href="https://www.whatismyip.com" target="_blank" rel="noopener">whatismyip.com</a> then visit Claude/OpenAI — in the dashboard's <b>Connections</b> tab, confirm <code>claude.ai</code> goes out via <code>trusted-exit → mac-out</code>. The IP geolocation for those sites should be your US home, not Tokyo.</span></span></label>
   <label class="check"><input type="checkbox" data-step><span><span class="check-title">Normal traffic goes direct</span><br><span class="check-body">Visit GitHub — confirm it goes out <code>direct</code> (Tokyo IP). CN sites should not appear in the VPS connections at all (client handled them).</span></span></label>
@@ -292,7 +294,7 @@ sudo apt-get install -y gettext-base   # provides envsubst</code></pre></div>
     <ol>
       <li>Provision a new VPS (or request an IP swap from the provider).</li>
       <li>Get the repo + secrets onto it and run <code>vps/bootstrap.sh</code>.</li>
-      <li>Update the DNS A record <code>proxy.yourdomain.com</code> → new IP, and <code>VPS_HOST</code> in <code>secrets/vps.env</code>.</li>
+      <li>Update the DNS A record <code>static.yourdomain.com</code> → new IP, and <code>VPS_HOST</code> in <code>secrets/vps.env</code>.</li>
       <li>Re-render the client config (<code>client/render-client-config.sh</code>) and re-import. Reality reconnects by IP.</li>
     </ol>
     <p>Insurance against this: enable the <b>Cloudflare CDN fallback</b> (see <code>docs/cloudflare-fallback.md</code>) ahead of time — it survives the VPS IP being blocked entirely, because the client reaches Cloudflare's edge (not your VPS) and CF reaches the origin from outside the GFW. The VPS side ships ready; it's ~10 min of Cloudflare dashboard setup.</p>
@@ -320,7 +322,7 @@ sudo apt-get install -y gettext-base   # provides envsubst</code></pre></div>
   <h2>Troubleshooting</h2>
   <table>
     <tr><th>Symptom</th><th>Likely cause / fix</th></tr>
-    <tr><td>Hysteria2 won't get a cert</td><td><code>proxy.yourdomain.com</code> not resolving to the VPS, or port 80 blocked. Check <code>nslookup</code> + firewall + <code>docker logs sing-box</code>.</td></tr>
+    <tr><td>Hysteria2 won't get a cert</td><td><code>static.yourdomain.com</code> not resolving to the VPS, or port 80 blocked. Check <code>nslookup</code> + firewall + <code>docker logs sing-box</code>.</td></tr>
     <tr><td>Client connects but no sites load</td><td>Reality params mismatch. Verify the client's <code>public-key</code>/<code>short-id</code>/<code>servername</code> match the VPS. Re-render the client config.</td></tr>
     <tr><td>Claude/OpenAI show Tokyo IP, not US</td><td>You're in Mode B or the Mac is down → fail-open kicked in. Check the <code>trusted-exit</code> selector + Uptime Kuma.</td></tr>
     <tr><td>Slow / high latency to US sites</td><td>Tailscale on DERP relay (run the status check), or poor VPS↔China route. Consider a US-West VPS (design doc §4.3).</td></tr>

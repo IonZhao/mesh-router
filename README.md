@@ -24,7 +24,9 @@ VPS (any region, sing-box)        trust split: sensitive -> trusted-exit, else -
 ## Prerequisites (read first)
 
 - **A domain you own.** Required for Hysteria2's TLS cert (auto-issued via Let's Encrypt) and
-  the dashboards. ~$10/yr. Point an A record (e.g. `proxy.yourdomain.com`) at the VPS IP. Reality
+  the dashboards. ~$10/yr. Point an A record (e.g. `static.yourdomain.com` — pick a boring,
+  innocuous name; **avoid words like `proxy`/`vpn`**, since the hostname lands in public
+  Certificate Transparency logs and the Hysteria2 TLS SNI) at the VPS IP. Reality
   (port 443) does *not* use your domain — it borrows a real site's TLS handshake.
 - **A VPS — region is your call.** Tokyo gives the lowest everyday-browsing latency from China;
   a US-West box (CN2 GIA) shortens the hop to the US residential exit, better if AI traffic

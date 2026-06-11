@@ -28,7 +28,7 @@ Cloudflare dashboard → your domain → **DNS → Records → Add record**:
 |---|---|---|---|
 | A | `cdn` | your VPS public IP | **Proxied** (orange cloud) ✅ |
 
-This is the opposite of the `proxy.` record (which must be grey/DNS-only). `cdn.` MUST be orange.
+This is the opposite of the `static.` record (which must be grey/DNS-only). `cdn.` MUST be orange.
 
 ### 2. SSL/TLS mode = Full (not Flexible, not Full-strict)
 Our origin presents a **self-signed** cert on 2053, so:
