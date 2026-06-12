@@ -62,7 +62,8 @@
           "domain": ["${PROXY_DOMAIN}"],
           "email": "${ACME_EMAIL}",
           "provider": "letsencrypt",
-          "data_directory": "/etc/sing-box/acme"
+          "data_directory": "/etc/sing-box/acme",
+          "disable_tls_alpn_challenge": true
         }
       }
     },
