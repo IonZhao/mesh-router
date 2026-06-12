@@ -93,6 +93,7 @@
   <a href="#p6">6 · Firewall</a>
   <a href="#p7">7 · Client</a>
   <a href="#p8">8 · Verify</a>
+  <a href="#monitor">Monitoring</a>
   <a href="#modes">Switch modes</a>
   <a href="#cdn">CDN fallback</a>
   <a href="#runbooks">Runbooks</a>
@@ -273,6 +274,34 @@ sudo apt-get install -y gettext-base   # provides envsubst</code></pre></div>
   <label class="check"><input type="checkbox" data-step><span><span class="check-title">Normal traffic goes direct</span><br><span class="check-body">Visit GitHub — confirm it goes out <code>direct</code> (Tokyo IP). CN sites should not appear in the VPS connections at all (client handled them).</span></span></label>
   <label class="check"><input type="checkbox" data-step><span><span class="check-title">Uptime Kuma monitor added</span><br><span class="check-body">At <code>http://&lt;vps-ts-ip&gt;:3001</code> create a <b>TCP Port</b> monitor: host = Mac Tailscale IP, port <code>18443</code>, interval 60s, add a notification. This makes the fail-open behavior safe (you'll know when the Mac drops).</span></span></label>
   <label class="check"><input type="checkbox" data-step><span><span class="check-title">Tailscale link is direct, not DERP</span><br><span class="check-body"><code>docker exec tailscale tailscale status</code> — the Mac peer should show a <code>100.x</code>/direct address, not "relay". If relayed, throughput will be poor; check NAT / enable UPnP on the home router.</span></span></label>
+</section>
+
+<section id="monitor">
+  <h2>Monitoring — what's watched &amp; where</h2>
+  <p class="lead">Four dashboards, each a different lens. All are <b>Tailscale-only</b> (the firewall blocks these ports on the public IP) — open them at the VPS's <code>100.x</code> address (<code>docker exec tailscale tailscale ip -4</code>).</p>
+  <table>
+    <tr><th>Dashboard</th><th>URL</th><th>What it shows</th></tr>
+    <tr><td><b>metacubexd</b><br><span style="color:var(--muted);font-size:12px">sing-box Clash API</span></td><td><code>:9090/ui</code></td><td>Live connections + <b>which exit each took</b>, per-node latency, real-time up/down per connection, the <code>trusted-exit</code> selector (switch exit mode here)</td></tr>
+    <tr><td><b>Netdata</b></td><td><code>:19999</code></td><td>Real-time (per-second) <b>CPU</b> (total / per-core / per-container), <b>memory + swap</b>, <b>per-interface network</b> rates, disk I/O</td></tr>
+    <tr><td><b>Uptime Kuma</b></td><td><code>:3001</code></td><td>Up/down history + <b>alerting</b> for monitors you add (e.g. the Mac exit)</td></tr>
+    <tr><td><b>vnStat</b></td><td><code>:8685</code></td><td>Cumulative <b>per-interface traffic</b>, daily/monthly totals (quota tracking)</td></tr>
+  </table>
+
+  <h3>Where do I find metric X?</h3>
+  <table>
+    <tr><th>I want to see…</th><th>Go to</th></tr>
+    <tr><td>CPU / RAM / load %, per-container resource use</td><td><b>Netdata</b> <code>:19999</code></td></tr>
+    <tr><td>Which exit a connection used; per-exit / live throughput; verify the split</td><td><b>metacubexd</b> <code>:9090/ui</code></td></tr>
+    <tr><td>Is the Mac exit (or a host) up; get alerted when it drops</td><td><b>Uptime Kuma</b> <code>:3001</code></td></tr>
+    <tr><td>Monthly traffic vs. provider quota</td><td><b>vnStat</b> <code>:8685</code> · or CLI <code>docker exec vnstat vnstat -m</code></td></tr>
+  </table>
+  <div class="callout"><b>Per-container network isn't split out</b> — all containers use host networking, so network is measured per-interface (<code>eth0</code>, <code>tailscale0</code>…). Per-container CPU/memory work fine; for per-exit traffic use metacubexd.</div>
+
+  <h3>Netdata: use it locally, skip the cloud</h3>
+  <p>The new Netdata UI nudges you to sign in to <b>Netdata Cloud</b> (Google/GitHub). You don't need it — the agent collects everything locally regardless. Take the <b>no-account</b> path: when prompted, run this and paste the token it prints:</p>
+  <div class="codeblock"><button class="copy-btn">copy</button><pre><code>docker exec netdata cat /var/lib/netdata/netdata_random_session_id</code></pre></div>
+  <div class="callout warn"><b>Don't sign in with Google.</b> That ships this box's metrics to a third party and links it to your identity — the opposite of what a low-profile transit node wants. The session-id path gives the full local dashboard with no account.</div>
+  <div class="callout tip"><b>tier0 / tier1 / tier2</b> are Netdata's storage resolutions, automatic: <b>tier0</b> = per-second (short retention), <b>tier1</b> = per-minute, <b>tier2</b> = per-hour (longest). Recent data stays detailed; old data is downsampled to stay cheap. Nothing to configure.</div>
 </section>
 
 <section id="modes">

@@ -144,15 +144,39 @@ you so the degradation is never silent.
 
 ## Observability (all Tailscale-only)
 
-| Tool | URL | Use |
+**Four dashboards, each a different lens.** None are exposed publicly — reach them over Tailscale
+(the VPS's `100.x` address: `docker exec tailscale tailscale ip -4`). The firewall blocks these ports
+on the public IP.
+
+| Tool | URL | What it shows |
 |---|---|---|
-| metacubexd (sing-box Clash API) | `http://<vps-ts-ip>:9090/ui` | **live per-connection outbound view** — verify the split; switch modes |
-| Uptime Kuma | `http://<vps-ts-ip>:3001` | probe the Mac exit (TCP to `<mac-ts-ip>:18443`); alert on outage |
-| Netdata | `http://<vps-ts-ip>:19999` | real-time host/container metrics |
-| vnStat | `http://<vps-ts-ip>:8685` | long-term per-interface traffic (quota tracking) |
+| **metacubexd** (sing-box Clash API) | `http://<vps-ts-ip>:9090/ui` | Live connections + **which outbound each took**, per-node latency, real-time up/down per connection, the `trusted-exit` selector (switch exit mode here) |
+| **Netdata** | `http://<vps-ts-ip>:19999` | Real-time (per-second) **CPU** (total / per-core / per-container), **memory + swap**, **per-interface network** rates, disk I/O |
+| **Uptime Kuma** | `http://<vps-ts-ip>:3001` | Up/down history + **alerting** for whatever monitors you add (e.g. the Mac exit) |
+| **vnStat** | `http://<vps-ts-ip>:8685` | Cumulative **per-interface traffic**, daily/monthly totals (quota tracking) |
+
+**Where do I find metric X?**
+
+| I want to see… | Go to |
+|---|---|
+| CPU / RAM / load %, per-container resource use | **Netdata** (`:19999`) |
+| Which exit a connection used; per-exit / live throughput; verify the split | **metacubexd** (`:9090/ui`) |
+| Is the Mac exit (or a host) up; get alerted when it drops | **Uptime Kuma** (`:3001`) |
+| Monthly traffic vs. provider quota | **vnStat** (`:8685`) or CLI `docker exec vnstat vnstat -m` |
+
+> Note: per-container **network** attribution isn't available (all containers use host networking, so
+> network is measured per-interface). Per-container **CPU/memory** work fine; for per-exit traffic use
+> metacubexd.
 
 After first boot, add an Uptime Kuma monitor: **TCP Port**, host = Mac mini Tailscale IP, port `18443`,
 interval 60s, plus a notification. Optionally cron `scripts/check-tailscale-direct.sh` for DERP alerts.
+
+**Netdata access note.** The new Netdata UI nudges you to sign in to Netdata Cloud — you don't need it;
+the agent collects everything locally regardless. Use the **local, no-account** path: when prompted, run
+`docker exec netdata cat /var/lib/netdata/netdata_random_session_id` and paste the token. Don't sign in
+with Google — that ships your metrics to a third party (and links this box to your identity). Netdata
+keeps metrics at three resolutions, automatically: **tier0** per-second (short retention), **tier1**
+per-minute, **tier2** per-hour (longest) — so recent data is detailed and old data stays cheap.
 
 ## Runbooks
 
