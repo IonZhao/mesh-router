@@ -31,15 +31,22 @@ Cloudflare dashboard → your domain → **DNS → Records → Add record**:
 This is the opposite of the `static.` record (which must be grey/DNS-only). `cdn.` MUST be orange.
 
 ### 2. SSL/TLS mode = Full (not Flexible, not Full-strict)
-Our origin presents a **self-signed** cert on 2053, so:
+This is a **separate section from DNS** — you won't see it while adding the record. In the left
+sidebar go to **SSL/TLS → Overview** (the mode lives here, not on the DNS record).
 
-- **If you do NOT host a website on this domain:** SSL/TLS → Overview → set mode to **Full**.
-- **If you DO host a website** (and want Full-strict for it): leave the zone at Full-strict and add a
-  scoped override — SSL/TLS → **Configuration Rules** → "When hostname equals `cdn.yourdomain.com`"
-  → set **SSL = Full**. This keeps your website strict while letting the fallback use self-signed.
+- If the page shows **"Automatic SSL/TLS"** selected (the new default), click **Configure
+  SSL/TLS** / switch to **Custom SSL/TLS**, then pick **Full**. (Automatic probes the origin on
+  standard ports and may not handle our self-signed listener on 2053 correctly — set it explicitly.)
+- Our origin presents a **self-signed** cert on 2053, which is why the mode must be **Full**:
+  Full encrypts CF↔origin but does not validate the cert. **Full (strict)** would reject self-signed;
+  **Flexible** would talk plain HTTP and break the TLS listener.
 
-> Do NOT use **Flexible** — it makes Cloudflare talk plain HTTP to the origin, which mismatches our
-> TLS listener AND would weaken your website's security zone-wide.
+This setting is **zone-wide**. **If you also host a website** on this domain and want Full (strict)
+for it, leave the zone strict and scope an override instead: **Rules → Configuration Rules** →
+"When hostname equals `cdn.yourdomain.com`" → **SSL = Full**.
+
+> Never use **Flexible** — plain HTTP to the origin mismatches our TLS listener and weakens the
+> whole zone's security.
 
 ### 3. Set the domain in secrets and re-render the client
 In `secrets/vps.env` set `CDN_DOMAIN=cdn.yourdomain.com`, then on your laptop:

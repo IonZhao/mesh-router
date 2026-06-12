@@ -301,12 +301,11 @@ sudo apt-get install -y gettext-base   # provides envsubst</code></pre></div>
   <div class="callout danger"><b>Opposite of your proxy record:</b> the Hysteria2 host (<code>static.</code>) must be grey/DNS-only, but <code>cdn.</code> MUST be orange/proxied. Orange is what routes through Cloudflare's edge.</div>
 
   <h3>2 · SSL/TLS mode = Full</h3>
-  <p>The origin presents a self-signed cert on 2053, so set the mode to <b>Full</b> (not Flexible, not Full-strict):</p>
+  <div class="callout warn"><b>This is NOT on the DNS record</b> — it's a separate left-sidebar section. Go to <b>SSL/TLS → Overview</b>. If you see <b>"Automatic SSL/TLS"</b> selected (the new default), click <b>Configure SSL/TLS</b> → switch to <b>Custom SSL/TLS</b> → pick <b>Full</b>. Automatic may not probe our self-signed listener on 2053 correctly, so set it explicitly.</div>
+  <p>The origin presents a self-signed cert on 2053, so the mode must be <b>Full</b> — it encrypts CF↔origin without validating the cert. <b>Full (strict)</b> rejects self-signed; <b>Flexible</b> talks plain HTTP and breaks the TLS listener.</p>
   <ul>
-    <li><b>No website on this domain:</b> SSL/TLS → Overview → <b>Full</b>.</li>
-    <li><b>You run a website here</b> (want Full-strict for it): keep the zone strict, add SSL/TLS → <b>Configuration Rules</b> → "hostname equals <code>cdn.yourdomain.com</code>" → <b>SSL = Full</b>.</li>
+    <li><b>You run a website on this domain too</b> (want Full-strict for it): leave the zone strict and scope an override — <b>Rules → Configuration Rules</b> → "hostname equals <code>cdn.yourdomain.com</code>" → <b>SSL = Full</b>.</li>
   </ul>
-  <div class="callout warn"><b>Never Flexible</b> — it makes Cloudflare talk plain HTTP to the origin (mismatches our TLS listener) and weakens the whole zone's security.</div>
 
   <h3>3 · Point the client at it</h3>
   <p>Set <code>CDN_DOMAIN=cdn.yourdomain.com</code> in <code>secrets/vps.env</code>, then re-render and re-import the client:</p>
