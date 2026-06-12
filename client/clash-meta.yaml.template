@@ -85,8 +85,9 @@ proxy-groups:
       - hy2-vps
       - cdn-fallback
     url: 'https://www.gstatic.com/generate_204'
-    interval: 300
-    tolerance: 100
+    interval: 120                   # how fast a dead node is detected -> failover. Matters most when the
+                                    # VPS IP gets blocked (reality+hy2 both die -> fail over to cdn).
+    tolerance: 100                  # don't switch unless another node is >100ms faster (stops reality<->hy2 churn)
 
 rules:
   - GEOIP,private,DIRECT,no-resolve
