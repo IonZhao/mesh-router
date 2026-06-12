@@ -94,6 +94,7 @@
   <a href="#p7">7 · Client</a>
   <a href="#p8">8 · Verify</a>
   <a href="#modes">Switch modes</a>
+  <a href="#cdn">CDN fallback</a>
   <a href="#runbooks">Runbooks</a>
   <a href="#trouble">Troubleshooting</a>
 </nav>
@@ -284,6 +285,43 @@ sudo apt-get install -y gettext-base   # provides envsubst</code></pre></div>
     <tr><td><code>direct</code></td><td>VPS's own IP</td><td>Mode B</td></tr>
   </table>
   <p>In metacubexd → <b>Proxies</b> → group <code>trusted-exit</code> → click a member. Instant, persists across restarts. For a permanent default change, also edit <code>"default"</code> in <code>vps/sing-box/config.json.template</code> and re-run <code>bootstrap.sh</code>. In Mode B the Mac tunnel + monitoring stay running, just unused.</p>
+</section>
+
+<section id="cdn">
+  <h2>Optional · Cloudflare CDN fallback</h2>
+  <p class="lead">A last-resort path that <b>survives your VPS IP being GFW-blocked</b>: the China client only ever talks to Cloudflare's edge IPs, and Cloudflare reaches your VPS from outside the GFW. It's slower than Reality/Hysteria2, so the client only falls to it when the direct paths die. Skip this until your base system works — it's insurance, not day-one.</p>
+  <div class="callout tip"><b>The VPS side already ships ready.</b> <code>bootstrap.sh</code> generates a self-signed cert and starts a VLESS+WS inbound on <code>2053/tcp</code> — but it stays <b>dark behind the firewall</b> until you do the Cloudflare steps below. That's why <code>cdn-fallback</code> shows as dead/errored in the client right now: nothing is pointing at it yet. That's expected, not a bug.</div>
+
+  <h3>1 · DNS record — proxied (orange cloud)</h3>
+  <p>Cloudflare dashboard → your domain → <b>DNS → Add record</b>:</p>
+  <table>
+    <tr><th>Type</th><th>Name</th><th>Content</th><th>Proxy status</th></tr>
+    <tr><td>A</td><td><code>cdn</code></td><td>your VPS public IP</td><td><b>Proxied</b> (orange cloud) ✅</td></tr>
+  </table>
+  <div class="callout danger"><b>Opposite of your proxy record:</b> the Hysteria2 host (<code>proxy.</code>/<code>static.</code>) must be grey/DNS-only, but <code>cdn.</code> MUST be orange/proxied. Orange is what routes through Cloudflare's edge.</div>
+
+  <h3>2 · SSL/TLS mode = Full</h3>
+  <p>The origin presents a self-signed cert on 2053, so set the mode to <b>Full</b> (not Flexible, not Full-strict):</p>
+  <ul>
+    <li><b>No website on this domain:</b> SSL/TLS → Overview → <b>Full</b>.</li>
+    <li><b>You run a website here</b> (want Full-strict for it): keep the zone strict, add SSL/TLS → <b>Configuration Rules</b> → "hostname equals <code>cdn.yourdomain.com</code>" → <b>SSL = Full</b>.</li>
+  </ul>
+  <div class="callout warn"><b>Never Flexible</b> — it makes Cloudflare talk plain HTTP to the origin (mismatches our TLS listener) and weakens the whole zone's security.</div>
+
+  <h3>3 · Point the client at it</h3>
+  <p>Set <code>CDN_DOMAIN=cdn.yourdomain.com</code> in <code>secrets/vps.env</code>, then re-render and re-import the client:</p>
+  <div class="codeblock"><button class="copy-btn">copy</button><pre><code>cd mesh-router/client &amp;&amp; ./render-client-config.sh</code></pre></div>
+  <p>The VPS needs no redeploy for this — its inbound only cares about the WS path + cert, already in place.</p>
+
+  <h3>4 · Open the firewall to Cloudflare only</h3>
+  <div class="codeblock"><button class="copy-btn">copy</button><pre><code>sudo mesh-router/scripts/firewall-cdn.sh</code></pre></div>
+  <p>This allows <code>2053/tcp</code> from Cloudflare's edge ranges only (re-run it after Cloudflare rotates ranges).</p>
+
+  <label class="check"><input type="checkbox" data-step><span><span class="check-title"><code>cdn</code> A record added, proxied (orange)</span></span></label>
+  <label class="check"><input type="checkbox" data-step><span><span class="check-title">SSL/TLS mode set to Full (or a Full rule scoped to <code>cdn.*</code>)</span></span></label>
+  <label class="check"><input type="checkbox" data-step><span><span class="check-title">CDN_DOMAIN set, client re-rendered &amp; re-imported</span></span></label>
+  <label class="check"><input type="checkbox" data-step><span><span class="check-title"><code>firewall-cdn.sh</code> run; <code>cdn-fallback</code> now tests alive in the dashboard</span></span></label>
+  <p style="margin-top:14px;font-size:13px;color:var(--muted)">Full reference, port rationale, and the 443-via-Origin-Rule variant: <code>docs/cloudflare-fallback.md</code>.</p>
 </section>
 
 <section id="runbooks">
