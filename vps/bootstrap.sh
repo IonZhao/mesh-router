@@ -34,7 +34,7 @@ fi
 # 3. Load + validate required variables.
 set -a; # shellcheck disable=SC1090
 source "$SECRETS"; set +a
-REQUIRED=(PROXY_DOMAIN ACME_EMAIL REALITY_HANDSHAKE MAC_TAILSCALE_IP TS_AUTHKEY \
+REQUIRED=(STATIC_DOMAIN ACME_EMAIL REALITY_HANDSHAKE MAC_TAILSCALE_IP TS_AUTHKEY \
           VLESS_UUID REALITY_PRIVATE_KEY REALITY_SHORT_ID HY2_PASSWORD MAC_VLESS_UUID CLASH_API_SECRET CDN_WS_PATH)
 for v in "${REQUIRED[@]}"; do
   [[ -n "${!v:-}" ]] || die "Required secret '$v' is empty in secrets/vps.env"
@@ -43,7 +43,7 @@ case "$MAC_TAILSCALE_IP" in 100.x.*) die "MAC_TAILSCALE_IP is still a placeholde
 
 # 4. Render config.json from the template (only our known vars are substituted).
 command -v envsubst >/dev/null 2>&1 || die "envsubst not found. Install: apt-get install -y gettext-base"
-VARS='$PROXY_DOMAIN $ACME_EMAIL $REALITY_HANDSHAKE $MAC_TAILSCALE_IP $VLESS_UUID $REALITY_PRIVATE_KEY $REALITY_SHORT_ID $HY2_PASSWORD $MAC_VLESS_UUID $CLASH_API_SECRET $CDN_WS_PATH'
+VARS='$STATIC_DOMAIN $ACME_EMAIL $REALITY_HANDSHAKE $MAC_TAILSCALE_IP $VLESS_UUID $REALITY_PRIVATE_KEY $REALITY_SHORT_ID $HY2_PASSWORD $MAC_VLESS_UUID $CLASH_API_SECRET $CDN_WS_PATH'
 log "Rendering sing-box/config.json from template..."
 envsubst "$VARS" < "$TEMPLATE" > "$RENDERED"
 

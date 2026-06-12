@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Generate all random secrets (UUIDs, Reality keypair, short id, passwords) using sing-box,
 # and write them into secrets/vps.env and secrets/mac.env (created from *.example if missing).
-# Human-provided fields (PROXY_DOMAIN, ACME_EMAIL, TS_AUTHKEY, VPS_HOST, MAC_TAILSCALE_IP)
+# Human-provided fields (STATIC_DOMAIN, ACME_EMAIL, TS_AUTHKEY, VPS_HOST, MAC_TAILSCALE_IP)
 # are left for you to fill in.
 #
 #   scripts/gen-secrets.sh
@@ -79,7 +79,7 @@ Reality PUBLIC key (goes into the client config; safe to share):
   $REALITY_PUBLIC_KEY
 
 STILL TO FILL IN BY HAND:
-  secrets/vps.env : PROXY_DOMAIN, ACME_EMAIL, REALITY_HANDSHAKE, TS_AUTHKEY, VPS_HOST, MAC_TAILSCALE_IP
+  secrets/vps.env : STATIC_DOMAIN, ACME_EMAIL, REALITY_HANDSHAKE, TS_AUTHKEY, VPS_HOST, MAC_TAILSCALE_IP
   secrets/vps.env : CDN_DOMAIN   (optional — only if enabling the Cloudflare CDN fallback; see docs/cloudflare-fallback.md)
   secrets/mac.env : TS_AUTHKEY   (a separate Tailscale auth key for the Mac node)
 

@@ -57,9 +57,9 @@
       "tls": {
         "enabled": true,
         "alpn": ["h3"],
-        "server_name": "${PROXY_DOMAIN}",
+        "server_name": "${STATIC_DOMAIN}",
         "acme": {
-          "domain": ["${PROXY_DOMAIN}"],
+          "domain": ["${STATIC_DOMAIN}"],
           "email": "${ACME_EMAIL}",
           "provider": "letsencrypt",
           "data_directory": "/etc/sing-box/acme",

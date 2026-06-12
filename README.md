@@ -64,7 +64,7 @@ git clone <repo> && cd mesh-router
 
 # 1. Generate secrets (needs Docker), then fill in the human fields it lists.
 scripts/gen-secrets.sh
-#    edit secrets/vps.env : PROXY_DOMAIN, ACME_EMAIL, REALITY_HANDSHAKE, TS_AUTHKEY, VPS_HOST
+#    edit secrets/vps.env : STATIC_DOMAIN, ACME_EMAIL, REALITY_HANDSHAKE, TS_AUTHKEY, VPS_HOST
 #    edit secrets/mac.env : TS_AUTHKEY (a second, separate auth key)
 
 # 2. Mac mini first — it prints its Tailscale IP for the next step.
@@ -95,7 +95,7 @@ story. Secrets are the one thing that must NOT live in a public repo, so they tr
 | `<this-repo>` | public OK | all code, templates, examples, docs — **no real secrets, no real domain/IP** | `git clone https://github.com/<you>/<repo>` |
 | `<this-repo>-secrets` | **private** | your `secrets/vps.env.enc` + `secrets/mac.env.enc` (sops-encrypted) | `git clone git@github.com:<you>/<repo>-secrets secrets-private` then copy/symlink into `secrets/`, or clone directly into `secrets/` |
 
-The real `PROXY_DOMAIN`, `VPS_HOST`, keys, and passwords exist **only** in the private secrets
+The real `STATIC_DOMAIN`, `VPS_HOST`, keys, and passwords exist **only** in the private secrets
 (or your password manager). That's why the public repo is safe to publish as-is.
 
 **Full recovery from scratch (e.g. rebuilding a wiped VPS):**
@@ -159,7 +159,7 @@ interval 60s, plus a notification. Optionally cron `scripts/check-tailscale-dire
 ### A. VPS IP blocked (most likely disaster — target < 30 min)
 1. Provision a new VPS (or request an IP swap).
 2. `git clone <repo> && cd mesh-router/vps && ./bootstrap.sh` (secrets come from the sops file or your fill-in).
-3. Update the DNS A record for `PROXY_DOMAIN` → new IP, and `VPS_HOST` in `secrets/vps.env`.
+3. Update the DNS A record for `STATIC_DOMAIN` → new IP, and `VPS_HOST` in `secrets/vps.env`.
 4. Re-render and re-import the client config (`client/render-client-config.sh`). Reality reconnects by IP.
 - *Insurance:* enable the [Cloudflare CDN fallback](docs/cloudflare-fallback.md) ahead of time — it
   survives the VPS IP being blocked entirely (the client reaches Cloudflare's edge, not your VPS, and

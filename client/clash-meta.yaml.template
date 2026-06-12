@@ -53,10 +53,10 @@ proxies:
 
   - name: hy2-vps
     type: hysteria2
-    server: ${PROXY_DOMAIN}         # Hysteria2 connects by domain (real TLS cert)
+    server: ${STATIC_DOMAIN}         # Hysteria2 connects by domain (real TLS cert)
     port: 8443
     password: ${HY2_PASSWORD}
-    sni: ${PROXY_DOMAIN}
+    sni: ${STATIC_DOMAIN}
     alpn:
       - h3
 

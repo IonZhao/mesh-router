@@ -165,7 +165,7 @@
     <tr><td>A</td><td><code>static</code></td><td>your VPS IP, e.g. <code>203.0.113.45</code></td><td><b>DNS only</b> (grey cloud)</td></tr>
   </table>
   <div class="callout danger"><b>Critical:</b> set proxy status to <b>DNS only / grey cloud</b>, NOT proxied/orange. Hysteria2 is UDP, and Cloudflare's proxy doesn't pass arbitrary UDP — orange cloud would break it. (The orange cloud is only for the optional CDN-over-WebSocket fallback, which is a separate record.)</div>
-  <p>This gives you <code>static.yourdomain.com</code> → your VPS. That hostname is your <code>PROXY_DOMAIN</code>.</p>
+  <p>This gives you <code>static.yourdomain.com</code> → your VPS. That hostname is your <code>STATIC_DOMAIN</code>.</p>
   <div class="callout warn"><b>Pick a boring subdomain.</b> Avoid names like <code>proxy</code>, <code>vpn</code>, or <code>tunnel</code> — the hostname appears in public Certificate Transparency logs (every Let's Encrypt cert is logged forever), in the Hysteria2 TLS SNI on the wire, and in DNS queries, where keyword scanners flag obvious names. Boring names like <code>static</code>, <code>cdn</code>, <code>assets</code>, or <code>img</code> blend in as ordinary web infrastructure. (Reality on <code>:443</code> borrows a real site's handshake and never exposes your domain — only the Hysteria2 path does.)</div>
 
   <label class="check"><input type="checkbox" data-step><span><span class="check-title">Domain registered</span></span></label>
@@ -193,7 +193,7 @@
   <p>Then open <code>secrets/vps.env</code> and fill in the human fields:</p>
   <table>
     <tr><th>Field</th><th>Value</th></tr>
-    <tr><td><code>PROXY_DOMAIN</code></td><td><code>static.yourdomain.com</code> (from Phase 1)</td></tr>
+    <tr><td><code>STATIC_DOMAIN</code></td><td><code>static.yourdomain.com</code> (from Phase 1)</td></tr>
     <tr><td><code>ACME_EMAIL</code></td><td>your email (Let's Encrypt notices)</td></tr>
     <tr><td><code>REALITY_HANDSHAKE</code></td><td><code>www.microsoft.com</code> (a TLS1.3 site to impersonate; the default is fine)</td></tr>
     <tr><td><code>VPS_HOST</code></td><td>your VPS public IP (Reality connects by IP)</td></tr>
@@ -298,7 +298,7 @@ sudo apt-get install -y gettext-base   # provides envsubst</code></pre></div>
     <tr><th>Type</th><th>Name</th><th>Content</th><th>Proxy status</th></tr>
     <tr><td>A</td><td><code>cdn</code></td><td>your VPS public IP</td><td><b>Proxied</b> (orange cloud) ✅</td></tr>
   </table>
-  <div class="callout danger"><b>Opposite of your proxy record:</b> the Hysteria2 host (<code>proxy.</code>/<code>static.</code>) must be grey/DNS-only, but <code>cdn.</code> MUST be orange/proxied. Orange is what routes through Cloudflare's edge.</div>
+  <div class="callout danger"><b>Opposite of your proxy record:</b> the Hysteria2 host (<code>static.</code>) must be grey/DNS-only, but <code>cdn.</code> MUST be orange/proxied. Orange is what routes through Cloudflare's edge.</div>
 
   <h3>2 · SSL/TLS mode = Full</h3>
   <p>The origin presents a self-signed cert on 2053, so set the mode to <b>Full</b> (not Flexible, not Full-strict):</p>
