@@ -75,6 +75,12 @@ docker run --rm -v "$SCRIPT_DIR/sing-box/config.json:/c.json:ro" -v "$SCRIPT_DIR
 log "Starting stack..."
 ( cd "$SCRIPT_DIR" && docker compose --env-file "$REPO_ROOT/.env" up -d )
 
+# 7b. Apply config/secret changes. `up -d` won't recreate sing-box when only its
+#     bind-mounted config.json changed, and sing-box doesn't hot-reload — so restart it
+#     explicitly. Without this, re-running after editing config silently keeps the old one.
+log "Restarting sing-box to load the current config..."
+( cd "$SCRIPT_DIR" && docker compose --env-file "$REPO_ROOT/.env" restart sing-box )
+
 log "Done. Next:"
 echo "  - Check Tailscale joined:   docker exec tailscale tailscale status"
 echo "  - Apply firewall:           sudo ../scripts/firewall.sh"
