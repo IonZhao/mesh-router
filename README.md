@@ -49,7 +49,8 @@ VPS (any region, sing-box)        trust split: sensitive -> trusted-exit, else -
 | `vps/bootstrap.sh` | fresh VPS → running stack |
 | `mac-mini/setup.sh` | fresh macOS → running exit node (brew + launchd, no Docker) |
 | `mac-mini/sing-box/config.json.template` | single Tailscale-only inbound → direct |
-| `client/clash-meta.yaml.template` | fake-ip, CN-direct, Reality/Hysteria2 url-test group |
+| `client/clash-meta.yaml.template` | fake-ip, CN-direct, Reality/Hysteria2 url-test group (Clash.Meta clients) |
+| `client/render-share-links.sh` | share-link URIs + base64 subscription for non-Clash clients (Shadowrocket, v2rayN, sing-box…) |
 | `scripts/gen-secrets.sh` | generate UUIDs, Reality keypair, passwords |
 | `scripts/firewall.sh` | ufw: only proxy ports public; admin via Tailscale only |
 | `scripts/firewall-cdn.sh` | open the CDN fallback port (2053) to Cloudflare IPs only (optional) |
@@ -78,7 +79,9 @@ cd vps && ./bootstrap.sh
 sudo ../scripts/firewall.sh
 
 # 4. Client config.
-cd client && ./render-client-config.sh   # produces clash-meta.yaml -> import into Clash Meta
+cd client && ./render-client-config.sh   # produces clash-meta.yaml -> import into a Clash.Meta client
+#    OR for non-Clash clients (Shadowrocket, v2rayN, sing-box apps):
+#    ./render-share-links.sh              # produces share-links.txt + subscription.txt (local import)
 ```
 
 Validate before/after: `docker compose run --rm sing-box check -c /etc/sing-box/config.json`.

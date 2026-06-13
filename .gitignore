@@ -9,8 +9,11 @@ secrets/*
 # Rendered configs (produced from *.template by bootstrap/setup via envsubst).
 vps/sing-box/config.json
 mac-mini/sing-box/config.json
-mac-mini/launchd/com.crossborder.singbox.plist
+mac-mini/launchd/com.meshrouter.singbox.plist
 client/clash-meta.yaml
+# Generated client share-links / subscription — contain secrets, never commit.
+client/share-links.txt
+client/subscription.txt
 
 # Runtime state / data
 **/cache.db

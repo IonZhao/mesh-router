@@ -249,16 +249,22 @@ sudo apt-get install -y gettext-base   # provides envsubst</code></pre></div>
 
 <section id="p7">
   <h2><span class="phase-num">7</span> Client config</h2>
-  <p class="lead">Render the Clash Meta config (on any machine with the secrets), then import it into your China-side client.</p>
+  <p class="lead">Two import formats depending on your client. Run either on a machine that has the secrets.</p>
+  <h3>Clash.Meta clients (recommended — they inherit the routing rules)</h3>
   <div class="codeblock"><button class="copy-btn">copy</button><pre><code>cd mesh-router/client
 ./render-client-config.sh   # writes clash-meta.yaml</code></pre></div>
-  <p>Import <code>clash-meta.yaml</code> into a Clash Meta / mihomo client:</p>
+  <p>Import <code>clash-meta.yaml</code> into:</p>
   <ul>
-    <li><b>Windows/macOS:</b> Clash Verge Rev, or mihomo Party, or FlClash.</li>
-    <li><b>iOS:</b> Stash / Shadowrocket (support Reality + Hysteria2).</li>
+    <li><b>macOS / Windows / Linux:</b> Clash Verge Rev (free), mihomo Party, FlClash.</li>
+    <li><b>iOS + macOS (one universal app):</b> Stash.</li>
     <li><b>Android:</b> FlClash / ClashMetaForAndroid.</li>
   </ul>
-  <div class="callout"><b>How it routes:</b> the client sends CN traffic direct and everything else to the VPS via a url-test group (Reality primary, Hysteria2 backup — automatic failover). It does <b>not</b> decide which exit a site uses; the VPS does.</div>
+  <h3>Non-Clash clients (Shadowrocket, v2rayN, NekoBox, sing-box apps)</h3>
+  <div class="codeblock"><button class="copy-btn">copy</button><pre><code>cd mesh-router/client
+./render-share-links.sh   # writes share-links.txt + subscription.txt</code></pre></div>
+  <p>Paste a single URI from <code>share-links.txt</code>, or import <code>subscription.txt</code> as a <b>local subscription file</b> — that's the "one subscription" format you're used to.</p>
+  <div class="callout warn"><b>Share links carry only the nodes, not the routing.</b> clash-meta.yaml also encodes CN-direct + fake-ip + failover; share links don't — in a non-Clash client you set up routing rules yourself. <code>subscription.txt</code> holds your keys: keep it private, never expose it publicly.</div>
+  <div class="callout"><b>How routing works (Clash path):</b> the client sends CN traffic direct and everything else to the VPS via a url-test group (Reality primary, Hysteria2 backup — auto failover). It does <b>not</b> decide which exit a site uses; the VPS does.</div>
   <label class="check"><input type="checkbox" data-step><span><span class="check-title">Rendered clash-meta.yaml</span></span></label>
   <label class="check"><input type="checkbox" data-step><span><span class="check-title">Imported into client &amp; connected</span></span></label>
 </section>
