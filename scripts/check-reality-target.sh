@@ -39,7 +39,8 @@ judge() {
     }
     /^<<< .*RecordHeader/       { want_len = 1; next }
     /^Verify return code:/      { if (!done) cert = ($4 == "0"); done = 1 }   # handshake finished
-    /^Server Temp Key:/         { tk = $4; sub(/,$/, "", tk) }
+    /^(Server|Peer) Temp Key:/  { tk = $4; sub(/,$/, "", tk) }               # OpenSSL 1.1 - 3.4
+    /^Negotiated TLS1\.3 group:/ { tk = $4 }                                  # OpenSSL 3.5+
     /TLSv1\.3/                  { tls13 = 1 }
     /^ALPN protocol: h2$/       { h2 = 1 }
     END {
@@ -66,4 +67,6 @@ for host in "$@"; do
       | judge "$host" || rc=1
   fi
 done
+# A FAIL on every host can also mean this OpenSSL prints its handshake summary differently.
+[[ $rc -ne 0 && -z "${CHECK_REALITY_INPUT:-}" ]] && echo "(checked with $(openssl version 2>/dev/null))"
 exit $rc
