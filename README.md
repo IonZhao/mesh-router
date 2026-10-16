@@ -62,7 +62,9 @@ VPS (any region, sing-box)        trust split: sensitive -> trusted-exit, else -
 | `mac-mini/sing-box/config.json.template` | single Tailscale-only inbound → direct |
 | `client/clash-meta.yaml.template` | fake-ip; `fallback` group hy2 → Reality → CDN; meta-rules-dat CN rule sets + AdRules, `direct-extra` overrides, sniffer (Clash.Meta clients) |
 | `client/render-client-config.sh` | renders the template from secrets and pre-downloads the rule sets into `client/rules/` |
-| `client/probe-node.sh` | probe one node or group through an isolated mihomo (`probe-node.sh reality-vps 5`) |
+| `client/probe-node.sh` | probe one node or group through an isolated mihomo (`probe-node.sh reality-vps 5`; client TUN off) |
+| `client/health-check.sh`, `client/install-health-task.sh` | 5-minute client health check (CSV + Windows notifications) and its scheduled-task installer |
+| `scripts/singbox-log-alert.sh` | VPS cron probe: counts failing-traffic log lines, pushes to Uptime Kuma |
 | `client/render-share-links.sh` | share-link URIs + base64 subscription for non-Clash clients (Shadowrocket, v2rayN, sing-box…) |
 | `scripts/validate-configs.sh` | render both templates with throwaway values; `sing-box check` + `mihomo -t` |
 | `scripts/test-configs.sh` | offline test suite for the templates and tooling (run before every deploy) |
@@ -107,21 +109,26 @@ Docker), and `docker compose run --rm sing-box check -c /etc/sing-box/config.jso
 
 `scripts/test-configs.sh` (run it before every deploy) needs:
 
-- **mihomo** — Clash Verge Rev's bundled `verge-mihomo.exe` is found automatically on Windows;
-  elsewhere put `mihomo` on PATH or set `MIHOMO_BIN`.
+- **mihomo** — on Windows the scripts use Clash Verge Rev's bundled `verge-mihomo.exe`, found
+  through the running `clash-verge.exe` or the default install folders; set `MESH_CLASH_VERGE_DIR`
+  if yours lives elsewhere. On other systems put `mihomo` on PATH or set `MIHOMO_BIN`.
 - **sing-box at the version pinned in `.env`**, so the VPS config is checked by the same core the
-  VPS runs: either Docker is running, or unpack the release once under `.tools/` (gitignored),
-  where the scripts find it by itself:
+  VPS runs: either Docker is running (`SINGBOX_USE_DOCKER=1` forces it), or unpack the release
+  once under `.tools/` (gitignored), where the scripts find it by itself. `<platform>` is
+  `windows-amd64`, `linux-amd64`, `darwin-arm64`, …:
 
   ```bash
-  ver=$(grep '^SINGBOX_VERSION=' .env | cut -d= -f2); v=${ver#v}
-  gh release download "$ver" -R SagerNet/sing-box -p "sing-box-$v-windows-amd64.zip" -D .tools
-  unzip -q -o ".tools/sing-box-$v-windows-amd64.zip" -d .tools
+  ver=$(grep '^SINGBOX_VERSION=' .env | cut -d= -f2); v=${ver#v}; p=windows-amd64
+  curl -fsSL -o ".tools/sing-box-$v-$p.zip" --create-dirs \
+    "https://github.com/SagerNet/sing-box/releases/download/$ver/sing-box-$v-$p.zip"
+  unzip -q -o ".tools/sing-box-$v-$p.zip" -d .tools        # Linux/macOS: .tar.gz + tar -xzf … -C .tools
   ```
 
-  On Linux use `linux-amd64.tar.gz`, on Apple silicon `darwin-arm64.tar.gz` (`tar -xzf … -C .tools`).
-  Or point `SINGBOX_BIN` at any sing-box binary of that version.
-- **jq, openssl, curl.** The suite stops with "prerequisites missing" if any of these is absent.
+  (`gh release download "$ver" -R SagerNet/sing-box -p "sing-box-$v-$p.zip" -D .tools` does the
+  same with the GitHub CLI.) A sing-box of another version, via `SINGBOX_BIN` or PATH, still runs
+  the check but prints a WARN: its verdict may differ from the VPS's.
+- **jq, openssl, curl, envsubst (`gettext`), timeout (`coreutils`).** The suite stops with
+  "prerequisites missing" if any of these is absent.
 
 ### Client host checklist (Clash Verge Rev on Windows)
 
@@ -223,6 +230,52 @@ on the public IP.
 
 After first boot, add an Uptime Kuma monitor: **TCP Port**, host = Mac mini Tailscale IP, port `18443`,
 interval 60s, plus a notification. Optionally cron `scripts/check-tailscale-direct.sh` for DERP alerts.
+
+### Automated health checks
+
+Dashboards only help when you look at them; a path that is half-broken stays unnoticed for weeks
+(this happened to Reality). Two scheduled checks raise alerts instead:
+
+**VPS: `scripts/singbox-log-alert.sh`** counts, every 10 minutes, the sing-box log lines that mean
+traffic is failing — `network is unreachable` (dialed an address family the host has no route for),
+`failed to dial dest` (Reality handshake target unreachable, every Reality client sees EOF) and
+`processed invalid connection` (Reality rejected a handshake; a steady trickle is scanner noise, a
+jump means your own clients are rejected) — and pushes `up`/`down` with the counts to an Uptime Kuma
+**Push** monitor. Setup: create the push monitor in Kuma (heartbeat interval 900 s, so one missed
+cron run is not a false alarm), copy its push URL into `secrets/vps.env` as
+`KUMA_PUSH_URL_SINGBOX=…` exactly as Kuma shows it (the `?status=up&msg=OK&ping=` tail is dropped;
+the script sends its own status), then on the VPS:
+
+```bash
+( crontab -l 2>/dev/null; echo '*/10 * * * * /root/mesh-router/scripts/singbox-log-alert.sh >/dev/null 2>&1' ) | crontab -
+```
+
+Thresholds: `ALERT_UNREACHABLE_MAX` (0), `ALERT_DIAL_DEST_MAX` (0), `ALERT_INVALID_MAX` (unset =
+never alert on invalid handshakes alone). Run it by hand to see the counts; `ALERT_DRY_RUN=1`
+shows the push (token redacted) instead of sending it.
+
+**Client: `client/health-check.sh`** asks the running mihomo every 5 minutes which node `PROXY`
+is on, whether each node passes the group's own test URL, and how old the rule sets are; appends a
+row to `%LOCALAPPDATA%\mesh-router\health.csv`; and raises ONE Windows notification (plus one
+"recovered") when a node has been dead for 10 min, when `PROXY` has been off `hy2-vps` for 10 min,
+when a rule set is older than 3 days, or when the controller has been unreachable for 10 min
+(Clash Verge not running, controller off, or the secret rejected). Setup, in Git Bash:
+
+1. Clash Verge → Settings → Clash → turn **External controller** on (it listens on 127.0.0.1 only;
+   the script reads the address and secret from Verge's own runtime config, nothing is copied).
+2. `client/health-check.sh` once by hand — expect `status=ok group=hy2-vps …`. A
+   `status=unreachable` names the cause (controller off, Verge not running, wrong secret).
+3. `client/install-health-task.sh` registers the scheduled task "mesh-router health" (`--remove`
+   deletes it). It runs as you, while you are logged on, in a hidden console
+   (`conhost.exe --headless`), so nothing flashes and notifications reach the desktop. Leave it on
+   "Run only when user is logged on": the other mode runs in a session that cannot show them.
+
+Settings for the task go in `%LOCALAPPDATA%\mesh-router\health.env` as `KEY=value` lines (read on
+every run; values already in the environment win): `HEALTH_KUMA_PUSH_URL` (an Uptime Kuma push
+monitor with a 600 s interval, pasted as Kuma shows it), `HEALTH_NOTIFY=echo` (no toasts), the
+thresholds `HEALTH_DEAD_MIN`, `HEALTH_OFF_PREFERRED_MIN`, `HEALTH_UNREACHABLE_MIN`,
+`HEALTH_RULES_STALE_DAYS`, `HEALTH_PREFERRED`, or `MIHOMO_API` / `MIHOMO_SECRET` when the controller
+is not Verge's. `HEALTH_KUMA_DRY_RUN=1 client/health-check.sh` shows what would be pushed.
 
 **Netdata access note.** The new Netdata UI nudges you to sign in to Netdata Cloud — you don't need it;
 the agent collects everything locally regardless. Use the **local, no-account** path: when prompted, run

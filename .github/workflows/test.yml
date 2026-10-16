@@ -1,0 +1,51 @@
+name: config tests
+
+on:
+  push:
+    branches: [main]   # feature branches run through their pull request (one run, not two)
+  pull_request:
+
+jobs:
+  suite:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      MIHOMO_VERSION: v1.19.32
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # the hygiene check scans the branch history against origin/main
+
+      - name: Install tools
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq jq gettext-base openssl curl
+
+      - name: Install mihomo (pinned)
+        run: |
+          mkdir -p .tools/mihomo
+          curl -fsSL -o .tools/mihomo/mihomo.gz \
+            "https://github.com/MetaCubeX/mihomo/releases/download/${MIHOMO_VERSION}/mihomo-linux-amd64-${MIHOMO_VERSION}.gz"
+          gunzip -f .tools/mihomo/mihomo.gz
+          chmod +x .tools/mihomo/mihomo
+          .tools/mihomo/mihomo -v | head -1
+
+      - name: Install sing-box at the version pinned in .env
+        run: |
+          ver=$(grep '^SINGBOX_VERSION=' .env | cut -d= -f2); v=${ver#v}
+          curl -fsSL -o ".tools/sing-box-$v-linux-amd64.tar.gz" \
+            "https://github.com/SagerNet/sing-box/releases/download/$ver/sing-box-$v-linux-amd64.tar.gz"
+          tar -xzf ".tools/sing-box-$v-linux-amd64.tar.gz" -C .tools
+          ".tools/sing-box-$v-linux-amd64/sing-box" version | head -1
+
+      - name: Fetch mihomo geo databases (so test runs do not download them)
+        run: |
+          mkdir -p .tools/geo
+          for f in geosite.dat geoip.dat geoip.metadb country.mmdb; do
+            curl -fsSL -o ".tools/geo/$f" "https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/$f"
+          done
+          cp .tools/geo/country.mmdb .tools/geo/Country.mmdb
+
+      - name: Run the suite
+        env:
+          MIHOMO_BIN: ${{ github.workspace }}/.tools/mihomo/mihomo
+          MIHOMO_GEO_DIR: ${{ github.workspace }}/.tools/geo
+        run: bash scripts/test-configs.sh

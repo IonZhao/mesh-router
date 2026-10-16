@@ -45,8 +45,7 @@ ok()   { echo "OK   $*"; }
 bad()  { echo "FAIL $*"; failed=1; }
 warn() { echo "WARN $*"; }
 
-# Native-path form of a POSIX path (Windows binaries need D:/..., everything else is unchanged).
-native() { if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s\n' "$1"; fi; }
+# `native` (POSIX → D:/… on Windows) comes from lib.sh.
 
 # ---- throwaway values (well-formed, never real) ----------------------------------------------------
 write_throwaway_env "$TMP/throwaway.env"
@@ -85,18 +84,19 @@ check_vps() {
     -out "$(native "$work/root/acme/cdn-selfsigned.crt")" \
     -subj "/CN=cdn.local" >/dev/null 2>&1 || { bad "vps: openssl could not create the test cert"; return; }
 
-  sb="$(find_singbox)"
+  local ver have
+  ver="$(pinned_singbox_version)"
+  [[ -n "$ver" ]] || { bad "vps: SINGBOX_VERSION missing from $(mesh_env_file); cannot pick the sing-box to check with"; return; }
 
-  if [[ -n "$sb" && -z "${SINGBOX_USE_DOCKER:-}" ]]; then
+  check_with_binary() {
     sed "s#/etc/sing-box/#$(native "$work/root")/#g" "$work/config.json" >"$work/config.local.json"
-    if "$sb" check -c "$(native "$work/config.local.json")" >"$work/check.log" 2>&1; then
-      ok "vps: sing-box check passed ($("$sb" version 2>/dev/null | head -1))"
+    if "$1" check -c "$(native "$work/config.local.json")" >"$work/check.log" 2>&1; then
+      ok "vps: sing-box check passed ($("$1" version 2>/dev/null | head -1))"
     else
       bad "vps: sing-box check: $(tail -3 "$work/check.log" | tr '\n' ' ')"
     fi
-  elif command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
-    local ver
-    ver="$(pinned_singbox_version)"
+  }
+  check_with_docker() {
     # Mount sources in native form: Docker Desktop cannot see Git Bash's /tmp.
     if MSYS_NO_PATHCONV=1 docker run --rm \
          -v "$(native "$work/config.json"):/c.json:ro" \
@@ -107,8 +107,19 @@ check_vps() {
     else
       bad "vps: sing-box check: $(tail -3 "$work/check.log" | tr '\n' ' ')"
     fi
+  }
+
+  sb="$(find_singbox)"
+  if [[ -n "${SINGBOX_USE_DOCKER:-}" ]]; then
+    if docker_up; then check_with_docker; else bad "vps: SINGBOX_USE_DOCKER=1 is set but Docker is not running"; fi
+  elif [[ -n "$sb" ]]; then
+    have="$(singbox_version_of "$sb")"
+    [[ "$have" == "${ver#v}" ]] || warn "vps: sing-box $have found but .env pins $ver, which is what the VPS runs; the result may differ"
+    check_with_binary "$sb"
+  elif docker_up; then
+    check_with_docker
   else
-    warn "vps: no sing-box $(pinned_singbox_version) binary and Docker is not available; sing-box check skipped (README: Validating locally)"
+    warn "vps: no sing-box $ver binary (set SINGBOX_BIN or unpack .tools/sing-box-${ver#v}-$(host_platform)/, README: Validating locally) and Docker is not running; sing-box check skipped"
   fi
 }
 

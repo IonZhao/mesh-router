@@ -1,0 +1,14 @@
++0000 2026-10-15 18:03:07 ERROR [2068867362 19.7s] inbound/vless[vless-reality-in]: process connection from 198.51.100.23:53316: TLS handshake: REALITY: processed invalid connection
++0000 2026-10-15 18:03:08 ERROR [1696195603 22.4s] inbound/vless[vless-reality-in]: process connection from 198.51.100.77:21651: TLS handshake: REALITY: processed invalid connection
++0000 2026-10-15 18:03:18 INFO [639558419 0ms] inbound/vless[vless-reality-in]: inbound connection from 198.51.100.77:21651
++0000 2026-10-15 18:03:26 ERROR [2608545300 4ms] connection: open outbound connection: (dial tcp [2001:db8:1::1]:443: connect: network is unreachable | dial tcp [2001:db8:2::1]:443: connect: network is unreachable)
++0000 2026-10-15 18:03:27 ERROR [2161870200 8ms] connection: open outbound connection: (dial tcp [2001:db8:1::1]:443: connect: network is unreachable | dial tcp [2001:db8:2::1]:443: connect: network is unreachable)
++0000 2026-10-15 18:03:28 INFO [1880816328 0ms] inbound/vless[vless-reality-in]: inbound connection from 192.0.2.10:20078
++0000 2026-10-15 18:03:28 ERROR [1880816328 12ms] inbound/vless[vless-reality-in]: process connection from 192.0.2.10:20078: TLS handshake: REALITY: processed invalid connection
++0000 2026-10-15 18:03:30 ERROR [4017889145 5ms] connection: open outbound connection: dial tcp [2001:db8:3::10]:443: connect: network is unreachable
++0000 2026-10-15 18:05:28 INFO [463854897 0ms] inbound/vless[vless-reality-in]: inbound connection from 192.0.2.10:20220
++0000 2026-10-15 18:05:28 ERROR [463854897 1ms] inbound/vless[vless-reality-in]: process connection from 192.0.2.10:20220: TLS handshake: REALITY: failed to dial dest: (dial tcp [2001:db8:4::1]:443: connect: network is unreachable)
++0000 2026-10-15 18:05:29 ERROR [4161292620 15ms] connection: report handshake success: stream 36960 canceled by remote with error code 0
++0000 2026-10-15 18:08:20 INFO [1997470783 0ms] inbound/vless[vless-reality-in]: inbound connection from 192.0.2.10:20486
++0000 2026-10-15 18:08:20 ERROR [1997470783 420ms] inbound/vless[vless-reality-in]: process connection from 192.0.2.10:20486: TLS handshake: REALITY: processed invalid connection
++0000 2026-10-15 18:08:21 ERROR [3862661287 392ms] inbound/vless[vless-reality-in]: process connection from 192.0.2.10:20487: TLS handshake: REALITY: processed invalid connection
