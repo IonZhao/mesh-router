@@ -66,14 +66,20 @@ if [[ -z "${MESH_SKIP_RULE_DOWNLOAD:-}" ]]; then
   ' "$OUT" | while read -r url path; do
     rel="${path#./}"
     dest="$RULES_DIR/$rel"
-    if [[ -s "$dest" ]]; then echo "  present:    $rel"; continue; fi
+    verb="downloaded"
+    if [[ -s "$dest" ]]; then
+      # mihomo refreshes a cached file only once it is `interval` old, and a copy resets mtime, so a
+      # file older than a day is re-downloaded here; a fresh one is left alone.
+      if [[ -z "$(find "$dest" -mmin +1440 2>/dev/null)" ]]; then echo "  present:    $rel"; continue; fi
+      verb="refreshed"
+    fi
     mkdir -p "$(dirname "$dest")"
     if curl -fsSL --max-time 30 -o "$dest.part" "$url" 2>/dev/null; then
       mv "$dest.part" "$dest"
-      echo "  downloaded: $rel"
+      echo "  $verb: $rel"
     else
       rm -f "$dest.part"
-      echo "  WARN: could not download $url (the client will fetch it itself)"
+      echo "  WARN: could not download $url ($([[ -s "$dest" ]] && echo "keeping the cached copy" || echo "the client will fetch it itself"))"
     fi
   done
 fi

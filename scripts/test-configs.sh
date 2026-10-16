@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
-# Offline test suite for the config templates and the validation harness.
-# No network, no real secrets. Needs a mihomo binary and a sing-box binary (or Docker);
-# see scripts/validate-configs.sh for how they are found.
+# Test suite for the config templates and the local tooling. No real secrets are read except, in
+# the hygiene check, to make sure none of them is committed. Remote rule-set mirrors are never
+# needed: the runtime cases point providers at unreachable URLs and still pass when the few public
+# hosts they dial (baidu, tuna) are unreachable. Needs a mihomo binary and a sing-box binary (or
+# Docker); see scripts/validate-configs.sh for how they are found.
 #
 #   bash scripts/test-configs.sh
 #
@@ -62,17 +64,27 @@ expect() {
 # The repo is public: the deployment's own host, domains and the author's home paths must never be
 # committed — neither in tracked files nor anywhere in this branch's history. Values are read from
 # the local secrets file (when present) and never printed.
+# Print every private value from a secrets file that must never appear in the repo: hosts, domains
+# (plus the registrable domain behind STATIC_DOMAIN), UUIDs, passwords, keys, tokens. Placeholders
+# from the *.example files are skipped. Values are only compared, never printed by the suite.
+hygiene_values_from() {
+  local envf="$1" v val
+  [[ -f "$envf" ]] || return 0
+  for v in VPS_HOST STATIC_DOMAIN CDN_DOMAIN VLESS_UUID MAC_VLESS_UUID HY2_PASSWORD HY2_OBFS_PASSWORD \
+           REALITY_PRIVATE_KEY REALITY_SHORT_ID CLASH_API_SECRET CDN_WS_PATH TS_AUTHKEY; do
+    val="$(grep -E "^$v=" "$envf" | head -1 | cut -d= -f2 | awk '{print $1}' | tr -d '\r')"
+    case "$val" in
+      ""|*example*|203.0.113.*|cdn.invalid|100.x.*|change-me|changemechangeme|0123456789abcdef| \
+      00000000-0000-0000-0000-000000000000|tskey-auth-xxxxxxxxxxxx) ;;
+      *) printf '%s\n' "$val" ;;
+    esac
+    if [[ "$v" == STATIC_DOMAIN && "$val" == *.*.* && "$val" != *example* ]]; then printf '%s\n' "${val#*.}"; fi
+  done
+}
+
 hygiene() {
-  local envf="$REPO_ROOT/secrets/vps.env" vals=() v hits base="" found=0
-  if [[ -f "$envf" ]]; then
-    for v in VPS_HOST STATIC_DOMAIN CDN_DOMAIN; do
-      val="$(grep -E "^$v=" "$envf" | head -1 | cut -d= -f2 | awk '{print $1}')"
-      case "$val" in ""|*example*|203.0.113.*|cdn.invalid) ;; *) vals+=("$val") ;; esac
-    done
-    # the registrable domain behind STATIC_DOMAIN (static.<domain>) catches every subdomain
-    val="$(grep -E '^STATIC_DOMAIN=' "$envf" | head -1 | cut -d= -f2 | awk '{print $1}')"
-    [[ "$val" == *.*.* && "$val" != *example* ]] && vals+=("${val#*.}")
-  fi
+  local vals=() v hits base="" found=0
+  while IFS= read -r v; do [[ -n "$v" ]] && vals+=("$v"); done < <(hygiene_values_from "$REPO_ROOT/secrets/vps.env")
   # home-folder paths, split in two so this file does not match itself
   vals+=("C:\\""Users\\" "C:/""Users/" "/c/""Users/")
   base="$(git -C "$REPO_ROOT" merge-base HEAD origin/main 2>/dev/null || true)"
@@ -86,6 +98,32 @@ hygiene() {
     fi
   done
   [[ $found -eq 0 ]] && ok no_deployment_identifiers_tracked_or_in_history
+
+  # The value list must cover every secret the templates carry, not only hosts and domains.
+  local probe_env="$TMP/hygiene-probe.env" out
+  cat >"$probe_env" <<'EOF'
+VPS_HOST=198.51.100.7                      # comment
+STATIC_DOMAIN=static.hygiene-probe.test
+CDN_DOMAIN=cdn.example.com
+VLESS_UUID=0f1e2d3c-4b5a-4968-8777-66554433aabb
+MAC_VLESS_UUID=11111111-2222-4333-8444-555555555555
+HY2_PASSWORD=hy2probepass
+HY2_OBFS_PASSWORD=obfsprobepass
+REALITY_PRIVATE_KEY=cHJvYmUtcHJpdmF0ZS1rZXktcHJvYmUtcHJpdmF0ZQ
+REALITY_SHORT_ID=feedfacecafebeef
+CLASH_API_SECRET=clashprobesecret
+CDN_WS_PATH=wsprobepath
+TS_AUTHKEY=tskey-auth-probe123
+EOF
+  out="$(hygiene_values_from "$probe_env" 2>/dev/null | tr '\n' ' ')"
+  local want missing_vals=""
+  for want in 198.51.100.7 static.hygiene-probe.test hygiene-probe.test 0f1e2d3c-4b5a-4968-8777-66554433aabb \
+              11111111-2222-4333-8444-555555555555 hy2probepass obfsprobepass \
+              cHJvYmUtcHJpdmF0ZS1rZXktcHJvYmUtcHJpdmF0ZQ feedfacecafebeef clashprobesecret wsprobepath tskey-auth-probe123; do
+    [[ " $out " == *" $want "* ]] || missing_vals+=" $want"
+  done
+  if [[ -z "$missing_vals" && " $out " != *" cdn.example.com "* ]]; then ok hygiene_scans_every_secret_value
+  else ko "hygiene_scans_every_secret_value (missing:$missing_vals; placeholders kept: $([[ " $out " == *" cdn.example.com "* ]] && echo yes || echo no))"; fi
 
   # Every committed script except the sourced lib.sh must be executable (README runs them on Linux).
   hits="$(git -C "$REPO_ROOT" ls-files -s -- '*.sh' | awk '$1 != "100755" && $4 != "scripts/lib.sh" {print $4}' | tr '\n' ' ')"
@@ -296,11 +334,16 @@ client_runtime() {
 
   curl -s --noproxy '*' "http://$api/proxies/PROXY" >"$work/group.json"
   curl -s --noproxy '*' "http://$api/providers/rules" >"$work/providers.json"
+  curl -s --noproxy '*' "http://$api/rules" >"$work/rules.json"
+  # A false positive in the ad list must be correctable without sending the domain DIRECT:
+  # an inline proxy-extra set sits before the ads REJECT rule.
+  jq_true client_proxy_extra_precedes_ads "$work/rules.json" \
+    '[.rules[].payload] | (index("proxy-extra") != null) and (index("proxy-extra") < index("ads"))'
   jq_true client_group_is_fallback_hy2_first "$work/group.json" \
     '.type == "Fallback" and .all == ["hy2-vps", "reality-vps", "cdn-fallback"]'
   jq_true client_group_requires_http_204 "$work/group.json" '.expectedStatus == "204"'
   jq_true client_rule_providers_loaded "$work/providers.json" \
-    '(.providers | keys) as $k | ["ads", "cn-domain", "cn-ip", "direct-extra"] - $k == []'
+    '(.providers | keys) as $k | ["ads", "cn-domain", "cn-ip", "direct-extra", "proxy-extra"] - $k == []'
 
   # mihomo holds connections for a few seconds while rule providers are still initialising
   # (measured: ~1-6 s with unreachable URLs and no cached files); wait until it routes traffic.
@@ -354,6 +397,20 @@ render_preseed() {
   expect 0 render_survives_unreachable_rule_sets "WARN: could not download" \
     env MESH_SECRETS_FILES="$TMP/preseed.env" MESH_CLIENT_TPL="$work/down.template" \
         MESH_CLIENT_OUT="$work/down.yaml" MESH_RULES_DIR="$work/down" bash "$REPO_ROOT/client/render-client-config.sh"
+  # A cached rule file older than a day is refreshed; a fresh one is left alone.
+  mkdir -p "$work/stale/rules"
+  printf 'old\n' >"$work/stale/rules/cn-domain.mrs"
+  touch -d '2 days ago' "$work/stale/rules/cn-domain.mrs"
+  printf 'keep\n' >"$work/stale/rules/ads.mrs"
+  expect 0 render_refreshes_rule_sets_older_than_a_day "refreshed: +rules/cn-domain.mrs" \
+    env MESH_SECRETS_FILES="$TMP/preseed.env" MESH_CLIENT_TPL="$work/ok.template" \
+        MESH_CLIENT_OUT="$work/stale.yaml" MESH_RULES_DIR="$work/stale" bash "$REPO_ROOT/client/render-client-config.sh"
+  if cmp -s "$fixture" "$work/stale/rules/cn-domain.mrs" && [[ "$(cat "$work/stale/rules/ads.mrs")" == "keep" ]]; then
+    ok render_refresh_replaces_only_stale_files
+  else
+    ko "render_refresh_replaces_only_stale_files (stale not replaced, or fresh file touched)"
+  fi
+
   # A secrets file under a path with a space (a home folder named "First Last") still loads.
   mkdir -p "$work/dir with space"
   cp "$TMP/preseed.env" "$work/dir with space/vps.env"
@@ -362,6 +419,36 @@ render_preseed() {
         MESH_CLIENT_OUT="$work/space.yaml" bash "$REPO_ROOT/client/render-client-config.sh"
 }
 render_preseed
+
+# --- client/probe-node.sh safety -------------------------------------------------------------------
+probe_safety() {
+  local work="$TMP/probe" P="$REPO_ROOT/client/probe-node.sh"
+  mkdir -p "$work"
+  # shellcheck source=lib.sh
+  source "$SCRIPT_DIR/lib.sh"
+  write_throwaway_env "$TMP/probe.env"
+  MESH_SECRETS_FILES="$TMP/probe.env" MESH_CLIENT_OUT="$work/config.yaml" MESH_SKIP_RULE_DOWNLOAD=1 \
+    bash "$REPO_ROOT/client/render-client-config.sh" >/dev/null 2>&1 || { ko "probe_safety (render failed)"; return; }
+  printf 'tun:\n  enable: true\n  stack: gvisor\n' >"$work/tun-on.yaml"
+  printf 'tun:\n  enable: false\n' >"$work/tun-off.yaml"
+
+  # With the client's TUN on, the probe's own dials would be captured and tunnelled: refuse.
+  expect 2 probe_refuses_when_client_tun_is_on "TUN" \
+    env PROBE_CONFIG="$work/config.yaml" PROBE_VERGE_RUNTIME="$work/tun-on.yaml" bash "$P" hy2-vps
+  # The run budget grows with the try count (30 s + 12 s per try) instead of a fixed 120 s.
+  expect 0 probe_budget_scales_with_count "up to 270 s" \
+    env PROBE_CONFIG="$work/config.yaml" PROBE_VERGE_RUNTIME="$work/tun-off.yaml" PROBE_DRY_RUN=1 bash "$P" hy2-vps 20
+  # Printed errors never show the servers' addresses (probe output gets pasted into docs).
+  # reality-vps's server is an IP (TEST-NET), so mihomo's dial error names it; hy2's error does not.
+  expect 1 probe_output_hides_server_addresses "<server>" \
+    env PROBE_CONFIG="$work/config.yaml" PROBE_VERGE_RUNTIME="$work/tun-off.yaml" PROBE_DIAL_TIMEOUT=8 PROBE_PORT=17892 bash "$P" reality-vps 1
+  if grep -qE 'static\.example\.com|203\.0\.113\.45|cdn\.example\.com' "$TMP/probe_output_hides_server_addresses.log"; then
+    ko "probe_output_hides_server_addresses (a server address is printed)"
+  else
+    ok probe_output_has_no_server_addresses
+  fi
+}
+probe_safety
 
 echo
 echo "$pass passed, $fail failed"
