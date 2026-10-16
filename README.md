@@ -241,30 +241,41 @@ traffic is failing — `network is unreachable` (dialed an address family the ho
 `failed to dial dest` (Reality handshake target unreachable, every Reality client sees EOF) and
 `processed invalid connection` (Reality rejected a handshake; a steady trickle is scanner noise, a
 jump means your own clients are rejected) — and pushes `up`/`down` with the counts to an Uptime Kuma
-**Push** monitor. Setup: create the push monitor in Kuma (interval 600 s), put its URL in
-`secrets/vps.env` as `KUMA_PUSH_URL_SINGBOX=…`, then on the VPS:
+**Push** monitor. Setup: create the push monitor in Kuma (heartbeat interval 900 s, so one missed
+cron run is not a false alarm), copy its push URL into `secrets/vps.env` as
+`KUMA_PUSH_URL_SINGBOX=…` exactly as Kuma shows it (the `?status=up&msg=OK&ping=` tail is dropped;
+the script sends its own status), then on the VPS:
 
 ```bash
 ( crontab -l 2>/dev/null; echo '*/10 * * * * /root/mesh-router/scripts/singbox-log-alert.sh >/dev/null 2>&1' ) | crontab -
 ```
 
 Thresholds: `ALERT_UNREACHABLE_MAX` (0), `ALERT_DIAL_DEST_MAX` (0), `ALERT_INVALID_MAX` (unset =
-never alert on invalid handshakes alone). Run it by hand to see the counts.
+never alert on invalid handshakes alone). Run it by hand to see the counts; `ALERT_DRY_RUN=1`
+shows the push (token redacted) instead of sending it.
 
 **Client: `client/health-check.sh`** asks the running mihomo every 5 minutes which node `PROXY`
-is on, whether each node is alive and how old the rule sets are, appends a row to
-`%LOCALAPPDATA%\mesh-router\health.csv`, and raises ONE Windows notification (plus one "recovered")
-when a node has been dead for 10 min, when `PROXY` has been off `hy2-vps` for 10 min, when a rule
-set is older than 3 days, or when the controller cannot be reached. Setup, in Git Bash:
+is on, whether each node passes the group's own test URL, and how old the rule sets are; appends a
+row to `%LOCALAPPDATA%\mesh-router\health.csv`; and raises ONE Windows notification (plus one
+"recovered") when a node has been dead for 10 min, when `PROXY` has been off `hy2-vps` for 10 min,
+when a rule set is older than 3 days, or when the controller has been unreachable for 10 min
+(Clash Verge not running, controller off, or the secret rejected). Setup, in Git Bash:
 
 1. Clash Verge → Settings → Clash → turn **External controller** on (it listens on 127.0.0.1 only;
    the script reads the address and secret from Verge's own runtime config, nothing is copied).
-2. `client/health-check.sh` once by hand — expect `status=ok group=hy2-vps …`.
-3. `client/install-health-task.sh` registers the 5-minute scheduled task (`--remove` deletes it).
+2. `client/health-check.sh` once by hand — expect `status=ok group=hy2-vps …`. A
+   `status=unreachable` names the cause (controller off, Verge not running, wrong secret).
+3. `client/install-health-task.sh` registers the scheduled task "mesh-router health" (`--remove`
+   deletes it). It runs as you, while you are logged on, in a hidden console
+   (`conhost.exe --headless`), so nothing flashes and notifications reach the desktop. Leave it on
+   "Run only when user is logged on": the other mode runs in a session that cannot show them.
 
-Optional: `HEALTH_KUMA_PUSH_URL` pushes `up`/`down` to an Uptime Kuma push monitor as well;
-`HEALTH_NOTIFY=echo` disables toasts. Thresholds: `HEALTH_DEAD_MIN`, `HEALTH_OFF_PREFERRED_MIN`,
-`HEALTH_RULES_STALE_DAYS`, `HEALTH_PREFERRED`.
+Settings for the task go in `%LOCALAPPDATA%\mesh-router\health.env` as `KEY=value` lines (read on
+every run; values already in the environment win): `HEALTH_KUMA_PUSH_URL` (an Uptime Kuma push
+monitor with a 600 s interval, pasted as Kuma shows it), `HEALTH_NOTIFY=echo` (no toasts), the
+thresholds `HEALTH_DEAD_MIN`, `HEALTH_OFF_PREFERRED_MIN`, `HEALTH_UNREACHABLE_MIN`,
+`HEALTH_RULES_STALE_DAYS`, `HEALTH_PREFERRED`, or `MIHOMO_API` / `MIHOMO_SECRET` when the controller
+is not Verge's. `HEALTH_KUMA_DRY_RUN=1 client/health-check.sh` shows what would be pushed.
 
 **Netdata access note.** The new Netdata UI nudges you to sign in to Netdata Cloud — you don't need it;
 the agent collects everything locally regardless. Use the **local, no-account** path: when prompted, run

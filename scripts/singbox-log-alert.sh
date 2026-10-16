@@ -17,20 +17,25 @@
 # Status is `down` when unreachable > $ALERT_UNREACHABLE_MAX (0), dial_dest > $ALERT_DIAL_DEST_MAX
 # (0) or invalid > $ALERT_INVALID_MAX (unset = never). Exit 0 = up, 1 = down.
 #
-# Push: set KUMA_PUSH_URL (or KUMA_PUSH_URL_SINGBOX in secrets/vps.env, which is sourced when
-# present) to the monitor's push URL; the script appends ?status=&msg=. ALERT_DRY_RUN=1 prints the
-# query instead of sending it. SINGBOX_LOG_INPUT=<file> reads a saved log instead of `docker logs`
-# (tests). The push token is never printed.
+# Push: set KUMA_PUSH_URL, or put KUMA_PUSH_URL_SINGBOX=<url> in secrets/vps.env (that one line is
+# read; the file is not sourced). Paste the URL as Kuma shows it: it is used up to the push token,
+# and the script adds its own ?status=&msg=. ALERT_DRY_RUN=1 prints the push (token redacted)
+# instead of sending it. SINGBOX_LOG_INPUT=<file> reads a saved log instead of `docker logs`
+# (tests); ALERT_SECRETS_FILE overrides the secrets file (tests). The push token is never printed.
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WINDOW="${WINDOW:-10m}"
 CONTAINER="${SINGBOX_CONTAINER:-sing-box}"
+SECRETS_FILE="${ALERT_SECRETS_FILE:-$SCRIPT_DIR/../secrets/vps.env}"
 
-if [[ -z "${KUMA_PUSH_URL:-}" && -f "$SCRIPT_DIR/../secrets/vps.env" ]]; then
-  KUMA_PUSH_URL="$(grep -E '^KUMA_PUSH_URL_SINGBOX=' "$SCRIPT_DIR/../secrets/vps.env" | head -1 | cut -d= -f2 | awk '{print $1}')"
+if [[ -z "${KUMA_PUSH_URL:-}" && -f "$SECRETS_FILE" ]]; then
+  # value = everything after the first "=", minus quotes, a trailing "# comment" and CR
+  KUMA_PUSH_URL="$(grep -E '^KUMA_PUSH_URL_SINGBOX=' "$SECRETS_FILE" | head -1 | cut -d= -f2- \
+    | sed 's/[[:space:]]#.*$//; s/^[[:space:]]*//; s/[[:space:]]*$//' | tr -d '\r"'"'")"
 fi
 KUMA_PUSH_URL="${KUMA_PUSH_URL:-}"
+KUMA_PUSH_URL="${KUMA_PUSH_URL%%\?*}"     # Kuma shows "...?status=up&msg=OK&ping="; we send our own status
 
 if [[ -n "${SINGBOX_LOG_INPUT:-}" ]]; then
   LOG="$(cat "$SINGBOX_LOG_INPUT")"
@@ -57,7 +62,7 @@ if [[ -n "$KUMA_PUSH_URL" ]]; then
   # msg is URL-encoded by hand (only = and space occur); the token stays inside KUMA_PUSH_URL.
   query="?status=$status&msg=$(printf '%s' "$summary" | sed 's/=/%3D/g; s/ /%20/g')"
   if [[ -n "${ALERT_DRY_RUN:-}" ]]; then
-    echo "push: $query"
+    echo "push: ${KUMA_PUSH_URL%/*}/***$query"
   else
     curl -fsS --max-time 15 "${KUMA_PUSH_URL}${query}" >/dev/null 2>&1 || echo "push: failed (Uptime Kuma unreachable)"
   fi

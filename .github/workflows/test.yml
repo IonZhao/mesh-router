@@ -2,7 +2,7 @@ name: config tests
 
 on:
   push:
-    branches: ["**"]
+    branches: [main]   # feature branches run through their pull request (one run, not two)
   pull_request:
 
 jobs:
