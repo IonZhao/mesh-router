@@ -1,6 +1,6 @@
 {
   "log": {
-    "level": "info",
+    "level": "${SINGBOX_LOG_LEVEL}",
     "timestamp": true
   },
   "dns": {
@@ -12,7 +12,7 @@
       }
     ],
     "final": "doh-remote",
-    "strategy": "prefer_ipv4"
+    "strategy": "ipv4_only"
   },
   "inbounds": [
     {
@@ -35,7 +35,8 @@
           "enabled": true,
           "handshake": {
             "server": "${REALITY_HANDSHAKE}",
-            "server_port": 443
+            "server_port": 443,
+            "domain_strategy": "ipv4_only"
           },
           "private_key": "${REALITY_PRIVATE_KEY}",
           "short_id": ["${REALITY_SHORT_ID}"]
@@ -91,7 +92,8 @@
   "outbounds": [
     {
       "type": "direct",
-      "tag": "direct"
+      "tag": "direct",
+      "domain_strategy": "ipv4_only"
     },
     {
       "type": "vless",

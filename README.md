@@ -28,6 +28,10 @@ VPS (any region, sing-box)        trust split: sensitive -> trusted-exit, else -
   innocuous name; **avoid words like `proxy`/`vpn`**, since the hostname lands in public
   Certificate Transparency logs and the Hysteria2 TLS SNI) at the VPS IP. Reality
   (port 443) does *not* use your domain — it borrows a real site's TLS handshake.
+- **IPv6 is not needed on the VPS.** sing-box resolves and dials IPv4 only (`dns.strategy`,
+  the `direct` outbound and the Reality handshake are all `ipv4_only`). Without that, a host
+  with no IPv6 route gets IPv6-only answers now and then and fails with `network is unreachable`
+  — which also breaks the Reality handshake and shows up on the client as `connect error: EOF`.
 - **A VPS — region is your call.** Tokyo gives the lowest everyday-browsing latency from China;
   a US-West box (CN2 GIA) shortens the hop to the US residential exit, better if AI traffic
   dominates. Either works — the configs are region-agnostic; just set `VPS_HOSTNAME` in `.env`.
@@ -218,6 +222,10 @@ should opt into `trusted-exit`, per-domain. `api.anthropic.com` / `api.openai.co
 direct (datacenter IPs are normal for API traffic).
 
 ## Version pinning
+
+sing-box logs at `info`. To diagnose, re-run `SINGBOX_LOG_LEVEL=debug ./bootstrap.sh`, read
+`docker logs sing-box`, then re-run plain `./bootstrap.sh` — Docker's json log is not rotated, so
+do not leave `debug` on.
 
 `/.env` pins image tags. sing-box configs target the **1.11.x** schema. Bumping sing-box to 1.12+
 may require config changes (the DNS server format changed). Always `sing-box check` after a bump.

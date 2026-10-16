@@ -61,6 +61,32 @@ awk '{print} /^rules:/{print "  - RULE-SET,no-such-provider,DIRECT"}' "$CLIENT_T
 expect 1 client_unknown_provider_rejected "FAIL client: mihomo -t" \
   env CLIENT_TEMPLATE="$TMP/bad-rule.yaml.template" bash "$V" --client
 
+# --- VPS template behaviour ------------------------------------------------------------------------
+# jq_true <case-name> <file> <jq-filter that must yield true>. The VPS template is plain JSON (its
+# ${VAR} placeholders all sit inside strings), so jq reads it directly.
+jq_true() {
+  local name="$1" file="$2" filter="$3"
+  if jq -e "$filter" "$file" >/dev/null 2>&1; then ok "$name"; else ko "$name (jq: $filter)"; fi
+}
+
+# The VPS has no IPv6 route: resolve and dial IPv4 only, including the Reality handshake target.
+jq_true vps_dns_ipv4_only "$VPS_TPL" '.dns.strategy == "ipv4_only"'
+jq_true vps_direct_outbound_ipv4_only "$VPS_TPL" \
+  '[.outbounds[] | select(.tag == "direct") | .domain_strategy] == ["ipv4_only"]'
+jq_true vps_reality_handshake_ipv4_only "$VPS_TPL" \
+  '[.inbounds[] | select(.tag == "vless-reality-in") | .tls.reality.handshake.domain_strategy] == ["ipv4_only"]'
+# Every DNS server is reachable from `final` or a rule (sing-box never queries an orphan server).
+jq_true vps_no_orphan_dns_servers "$VPS_TPL" \
+  '[.dns.servers[].tag] - [.dns.final] - [(.dns.rules // [])[].server] == []'
+
+# Log verbosity is chosen at deploy time and defaults to info, never committed as debug.
+jq_true vps_log_level_is_a_deploy_variable "$VPS_TPL" '.log.level == "${SINGBOX_LOG_LEVEL}"'
+if grep -qE 'SINGBOX_LOG_LEVEL="\$\{SINGBOX_LOG_LEVEL:-info\}"' "$REPO_ROOT/vps/bootstrap.sh"; then
+  ok vps_log_level_defaults_to_info
+else
+  ko "vps_log_level_defaults_to_info (bootstrap.sh does not default SINGBOX_LOG_LEVEL to info)"
+fi
+
 echo
 echo "$pass passed, $fail failed"
 [[ "$fail" -eq 0 ]]
