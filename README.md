@@ -62,7 +62,9 @@ VPS (any region, sing-box)        trust split: sensitive -> trusted-exit, else -
 | `mac-mini/sing-box/config.json.template` | single Tailscale-only inbound → direct |
 | `client/clash-meta.yaml.template` | fake-ip; `fallback` group hy2 → Reality → CDN; meta-rules-dat CN rule sets + AdRules, `direct-extra` overrides, sniffer (Clash.Meta clients) |
 | `client/render-client-config.sh` | renders the template from secrets and pre-downloads the rule sets into `client/rules/` |
-| `client/probe-node.sh` | probe one node or group through an isolated mihomo (`probe-node.sh reality-vps 5`) |
+| `client/probe-node.sh` | probe one node or group through an isolated mihomo (`probe-node.sh reality-vps 5`; client TUN off) |
+| `client/health-check.sh`, `client/install-health-task.sh` | 5-minute client health check (CSV + Windows notifications) and its scheduled-task installer |
+| `scripts/singbox-log-alert.sh` | VPS cron probe: counts failing-traffic log lines, pushes to Uptime Kuma |
 | `client/render-share-links.sh` | share-link URIs + base64 subscription for non-Clash clients (Shadowrocket, v2rayN, sing-box…) |
 | `scripts/validate-configs.sh` | render both templates with throwaway values; `sing-box check` + `mihomo -t` |
 | `scripts/test-configs.sh` | offline test suite for the templates and tooling (run before every deploy) |
@@ -248,6 +250,21 @@ jump means your own clients are rejected) — and pushes `up`/`down` with the co
 
 Thresholds: `ALERT_UNREACHABLE_MAX` (0), `ALERT_DIAL_DEST_MAX` (0), `ALERT_INVALID_MAX` (unset =
 never alert on invalid handshakes alone). Run it by hand to see the counts.
+
+**Client: `client/health-check.sh`** asks the running mihomo every 5 minutes which node `PROXY`
+is on, whether each node is alive and how old the rule sets are, appends a row to
+`%LOCALAPPDATA%\mesh-router\health.csv`, and raises ONE Windows notification (plus one "recovered")
+when a node has been dead for 10 min, when `PROXY` has been off `hy2-vps` for 10 min, when a rule
+set is older than 3 days, or when the controller cannot be reached. Setup, in Git Bash:
+
+1. Clash Verge → Settings → Clash → turn **External controller** on (it listens on 127.0.0.1 only;
+   the script reads the address and secret from Verge's own runtime config, nothing is copied).
+2. `client/health-check.sh` once by hand — expect `status=ok group=hy2-vps …`.
+3. `client/install-health-task.sh` registers the 5-minute scheduled task (`--remove` deletes it).
+
+Optional: `HEALTH_KUMA_PUSH_URL` pushes `up`/`down` to an Uptime Kuma push monitor as well;
+`HEALTH_NOTIFY=echo` disables toasts. Thresholds: `HEALTH_DEAD_MIN`, `HEALTH_OFF_PREFERRED_MIN`,
+`HEALTH_RULES_STALE_DAYS`, `HEALTH_PREFERRED`.
 
 **Netdata access note.** The new Netdata UI nudges you to sign in to Netdata Cloud — you don't need it;
 the agent collects everything locally regardless. Use the **local, no-account** path: when prompted, run

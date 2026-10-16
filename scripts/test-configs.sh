@@ -420,6 +420,77 @@ render_preseed() {
 }
 render_preseed
 
+# --- scripts/singbox-log-alert.sh (VPS cron → Uptime Kuma) ---------------------------------------
+A="$SCRIPT_DIR/singbox-log-alert.sh"
+# IPv6 "network is unreachable" and a failed handshake-target dial are outages: status=down, exit 1.
+expect 1 singbox_alert_down_on_unreachable "status=down unreachable=4 dial_dest=1 invalid=5 " \
+  env SINGBOX_LOG_INPUT="$TD/singbox-log-bad.txt" bash "$A"
+# Scanner noise alone (invalid Reality handshakes from strangers) is not an outage: status=up, exit 0.
+expect 0 singbox_alert_up_on_scanner_noise_only "status=up unreachable=0 dial_dest=0 invalid=4 " \
+  env SINGBOX_LOG_INPUT="$TD/singbox-log-ok.txt" bash "$A"
+# A lower invalid-connection ceiling turns noise into an alert when the owner wants it.
+expect 1 singbox_alert_invalid_ceiling_is_configurable "status=down" \
+  env SINGBOX_LOG_INPUT="$TD/singbox-log-ok.txt" ALERT_INVALID_MAX=3 bash "$A"
+# The Uptime Kuma push carries the status and the counts; the token in the URL is never printed.
+expect 1 singbox_alert_pushes_status_and_counts "push: \?status=down&msg=unreachable%3D4" \
+  env SINGBOX_LOG_INPUT="$TD/singbox-log-bad.txt" KUMA_PUSH_URL="http://127.0.0.1:9/api/push/SECRETTOKEN" ALERT_DRY_RUN=1 bash "$A"
+if grep -q SECRETTOKEN "$TMP/singbox_alert_pushes_status_and_counts.log" 2>/dev/null; then
+  ko "singbox_alert_never_prints_push_token"
+else
+  ok singbox_alert_never_prints_push_token
+fi
+
+# --- client/health-check.sh (scheduled on the client; CSV + alerts) --------------------------------
+H="$REPO_ROOT/client/health-check.sh"
+T0=1792119600                                   # 2026-10-16 03:00:00 UTC
+# health_fixture <dir> <PROXY now> <hy2 alive> <reality alive> <cdn alive> <providers updatedAt>
+health_fixture() {
+  local d="$1" spec n a
+  mkdir -p "$d"
+  jq -n --arg now "$2" '{all:["hy2-vps","reality-vps","cdn-fallback"],history:[],name:"PROXY",now:$now,type:"Fallback",udp:true,expectedStatus:"204"}' >"$d/proxies-PROXY.json"
+  for spec in "hy2-vps:$3" "reality-vps:$4" "cdn-fallback:$5"; do
+    n="${spec%%:*}"; a="${spec##*:}"
+    jq -n --arg n "$n" --argjson a "$a" '{alive:$a,history:[{time:"2026-10-16T02:59:00Z",delay:(if $a then 210 else 0 end)}],name:$n,type:"X",udp:true}' >"$d/proxies-$n.json"
+  done
+  jq -n --arg t "$6" '{providers:{"cn-domain":{name:"cn-domain",ruleCount:111224,updatedAt:$t,vehicleType:"HTTP"},"cn-ip":{name:"cn-ip",ruleCount:8000,updatedAt:$t,vehicleType:"HTTP"},"ads":{name:"ads",ruleCount:100000,updatedAt:$t,vehicleType:"HTTP"},"direct-extra":{name:"direct-extra",ruleCount:1,updatedAt:$t,vehicleType:"Inline"}}}' >"$d/providers-rules.json"
+}
+hc() { # hc <state dir> <fixture dir> <now epoch>  (notifications are echoed, never toasted)
+  env HEALTH_DIR="$1" HEALTH_API_FIXTURE_DIR="$2" HEALTH_NOW="$3" HEALTH_NOTIFY=echo bash "$H"
+}
+HD="$TMP/health"
+health_fixture "$HD/good" hy2-vps true true true 2026-10-16T01:00:00Z
+health_fixture "$HD/reality-dead" hy2-vps true false true 2026-10-16T01:00:00Z
+health_fixture "$HD/on-cdn" cdn-fallback true true true 2026-10-16T01:00:00Z
+health_fixture "$HD/stale-rules" hy2-vps true true true 2026-10-12T01:00:00Z
+mkdir -p "$HD/no-api"
+
+expect 0 health_ok_appends_csv_row "status=ok" hc "$HD/s1" "$HD/good" "$T0"
+if [[ -f "$HD/s1/health.csv" && "$(wc -l <"$HD/s1/health.csv")" -eq 2 ]]; then ok health_csv_has_header_and_one_row
+else ko "health_csv_has_header_and_one_row ($(wc -l <"$HD/s1/health.csv" 2>/dev/null || echo missing) lines)"; fi
+
+# A dead node is not an alert until it has been dead for 10 minutes; then exactly one alert,
+# then one "recovered" when it comes back.
+expect 0 health_dead_node_under_10min_is_quiet "status=ok" hc "$HD/s2" "$HD/reality-dead" "$T0"
+grep -q NOTIFY "$TMP/health_dead_node_under_10min_is_quiet.log" && ko "health_dead_node_under_10min_is_quiet (notified early)"
+expect 1 health_dead_node_over_10min_alerts "NOTIFY: reality-vps has been dead for 11 min" hc "$HD/s2" "$HD/reality-dead" "$((T0 + 660))"
+expect 1 health_dead_node_alert_not_repeated "status=alert" hc "$HD/s2" "$HD/reality-dead" "$((T0 + 960))"
+grep -q NOTIFY "$TMP/health_dead_node_alert_not_repeated.log" && ko "health_dead_node_alert_not_repeated (repeated notification)"
+expect 0 health_recovery_is_announced_once "NOTIFY: reality-vps recovered" hc "$HD/s2" "$HD/good" "$((T0 + 1200))"
+
+# The group should sit on hy2-vps; anything else for 10 minutes is an alert.
+expect 0 health_group_elsewhere_under_10min_is_quiet "status=ok" hc "$HD/s3" "$HD/on-cdn" "$T0"
+expect 1 health_group_elsewhere_over_10min_alerts "NOTIFY: PROXY is on cdn-fallback, not hy2-vps, for 11 min" hc "$HD/s3" "$HD/on-cdn" "$((T0 + 660))"
+
+# Rule sets older than 3 days are stale.
+expect 1 health_stale_rule_set_alerts "NOTIFY: rule set cn-domain last updated 4 days ago" hc "$HD/s4" "$HD/stale-rules" "$T0"
+
+# No controller → cannot check, one alert.
+expect 2 health_unreachable_controller_alerts "NOTIFY: mihomo controller unreachable" hc "$HD/s5" "$HD/no-api" "$T0"
+
+# The scheduler installer registers a 5-minute task.
+expect 0 health_task_installer_schedules_every_5_min "/SC MINUTE /MO 5" \
+  env SCHTASKS_DRY_RUN=1 bash "$REPO_ROOT/client/install-health-task.sh"
+
 # --- client/probe-node.sh safety -------------------------------------------------------------------
 probe_safety() {
   local work="$TMP/probe" P="$REPO_ROOT/client/probe-node.sh"
