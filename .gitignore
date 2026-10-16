@@ -24,3 +24,8 @@ vps/data/
 # age private key, if a copy ever lands here
 *.agekey
 key.txt
+
+# Local tooling scratch (rule-set downloads, single-node probe work dir)
+client/rules/
+client/.probe/
+.tools/

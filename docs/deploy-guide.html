@@ -196,7 +196,7 @@
     <tr><th>Field</th><th>Value</th></tr>
     <tr><td><code>STATIC_DOMAIN</code></td><td><code>static.yourdomain.com</code> (from Phase 1)</td></tr>
     <tr><td><code>ACME_EMAIL</code></td><td>your email (Let's Encrypt notices)</td></tr>
-    <tr><td><code>REALITY_HANDSHAKE</code></td><td><code>www.microsoft.com</code> (a TLS1.3 site to impersonate; the default is fine)</td></tr>
+    <tr><td><code>REALITY_HANDSHAKE</code></td><td><code>dl.google.com</code> (a TLS1.3 site to impersonate; on the VPS, <code>scripts/check-reality-target.sh dl.google.com</code> must print <code>PASS</code> — avoid <code>www.microsoft.com</code>, whose certificate records can exceed Reality's 8192-byte limit)</td></tr>
     <tr><td><code>VPS_HOST</code></td><td>your VPS public IP (Reality connects by IP)</td></tr>
     <tr><td><code>TS_AUTHKEY</code></td><td>auth key #1 from Phase 2</td></tr>
     <tr><td><code>MAC_TAILSCALE_IP</code></td><td>leave as placeholder — Phase 4 fills it</td></tr>
@@ -264,7 +264,7 @@ sudo apt-get install -y gettext-base   # provides envsubst</code></pre></div>
 ./render-share-links.sh   # writes share-links.txt + subscription.txt</code></pre></div>
   <p>Paste a single URI from <code>share-links.txt</code>, or import <code>subscription.txt</code> as a <b>local subscription file</b> — that's the "one subscription" format you're used to.</p>
   <div class="callout warn"><b>Share links carry only the nodes, not the routing.</b> clash-meta.yaml also encodes CN-direct + fake-ip + failover; share links don't — in a non-Clash client you set up routing rules yourself. <code>subscription.txt</code> holds your keys: keep it private, never expose it publicly.</div>
-  <div class="callout"><b>How routing works (Clash path):</b> the client sends CN traffic direct and everything else to the VPS via a url-test group (Reality primary, Hysteria2 backup — auto failover). It does <b>not</b> decide which exit a site uses; the VPS does.</div>
+  <div class="callout"><b>How routing works (Clash path):</b> the client sends CN traffic direct and everything else to the VPS via a fallback group (Hysteria2 first, then Reality, then the CDN path — the first node that passes its health check carries the traffic). It does <b>not</b> decide which exit a site uses; the VPS does.</div>
   <label class="check"><input type="checkbox" data-step><span><span class="check-title">Rendered clash-meta.yaml</span></span></label>
   <label class="check"><input type="checkbox" data-step><span><span class="check-title">Imported into client &amp; connected</span></span></label>
 </section>

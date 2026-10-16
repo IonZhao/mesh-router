@@ -43,7 +43,10 @@ case "$MAC_TAILSCALE_IP" in 100.x.*) die "MAC_TAILSCALE_IP is still a placeholde
 
 # 4. Render config.json from the template (only our known vars are substituted).
 command -v envsubst >/dev/null 2>&1 || die "envsubst not found. Install: apt-get install -y gettext-base"
-VARS='$STATIC_DOMAIN $ACME_EMAIL $REALITY_HANDSHAKE $MAC_TAILSCALE_IP $VLESS_UUID $REALITY_PRIVATE_KEY $REALITY_SHORT_ID $HY2_PASSWORD $MAC_VLESS_UUID $CLASH_API_SECRET $CDN_WS_PATH'
+# Log verbosity is a deploy-time choice, never committed: `SINGBOX_LOG_LEVEL=debug ./bootstrap.sh`
+# to diagnose, plain `./bootstrap.sh` to go back to info (Docker's json log is not rotated).
+export SINGBOX_LOG_LEVEL="${SINGBOX_LOG_LEVEL:-info}"
+VARS='$STATIC_DOMAIN $ACME_EMAIL $REALITY_HANDSHAKE $MAC_TAILSCALE_IP $VLESS_UUID $REALITY_PRIVATE_KEY $REALITY_SHORT_ID $HY2_PASSWORD $MAC_VLESS_UUID $CLASH_API_SECRET $CDN_WS_PATH $SINGBOX_LOG_LEVEL'
 log "Rendering sing-box/config.json from template..."
 envsubst "$VARS" < "$TEMPLATE" > "$RENDERED"
 

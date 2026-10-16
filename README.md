@@ -28,6 +28,17 @@ VPS (any region, sing-box)        trust split: sensitive -> trusted-exit, else -
   innocuous name; **avoid words like `proxy`/`vpn`**, since the hostname lands in public
   Certificate Transparency logs and the Hysteria2 TLS SNI) at the VPS IP. Reality
   (port 443) does *not* use your domain — it borrows a real site's TLS handshake.
+- **A Reality handshake target that fits REALITY's buffer.** `REALITY_HANDSHAKE` must be a
+  foreign site with TLS 1.3, X25519 and h2 whose handshake records stay within 8192 bytes
+  (sing-box/Xray's REALITY server drops the connection otherwise and logs
+  `processed invalid connection`; the client sees `connect error: EOF`). CDN-fronted sites send
+  different certificate chains to different places, so check candidates **from the VPS**:
+  `scripts/check-reality-target.sh dl.google.com www.apple.com` — use one that prints `PASS`.
+  `www.microsoft.com`, the old default here, can exceed the limit.
+- **IPv6 is not needed on the VPS.** sing-box resolves and dials IPv4 only (`dns.strategy`,
+  the `direct` outbound and the Reality handshake are all `ipv4_only`). Without that, a host
+  with no IPv6 route gets IPv6-only answers now and then and fails with `network is unreachable`
+  — which also breaks the Reality handshake and shows up on the client as `connect error: EOF`.
 - **A VPS — region is your call.** Tokyo gives the lowest everyday-browsing latency from China;
   a US-West box (CN2 GIA) shortens the hop to the US residential exit, better if AI traffic
   dominates. Either works — the configs are region-agnostic; just set `VPS_HOSTNAME` in `.env`.
@@ -49,8 +60,13 @@ VPS (any region, sing-box)        trust split: sensitive -> trusted-exit, else -
 | `vps/bootstrap.sh` | fresh VPS → running stack |
 | `mac-mini/setup.sh` | fresh macOS → running exit node (brew + launchd, no Docker) |
 | `mac-mini/sing-box/config.json.template` | single Tailscale-only inbound → direct |
-| `client/clash-meta.yaml.template` | fake-ip, CN-direct, Reality/Hysteria2 url-test group (Clash.Meta clients) |
+| `client/clash-meta.yaml.template` | fake-ip; `fallback` group hy2 → Reality → CDN; meta-rules-dat CN rule sets + AdRules, `direct-extra` overrides, sniffer (Clash.Meta clients) |
+| `client/render-client-config.sh` | renders the template from secrets and pre-downloads the rule sets into `client/rules/` |
+| `client/probe-node.sh` | probe one node or group through an isolated mihomo (`probe-node.sh reality-vps 5`) |
 | `client/render-share-links.sh` | share-link URIs + base64 subscription for non-Clash clients (Shadowrocket, v2rayN, sing-box…) |
+| `scripts/validate-configs.sh` | render both templates with throwaway values; `sing-box check` + `mihomo -t` |
+| `scripts/test-configs.sh` | offline test suite for the templates and tooling (run before every deploy) |
+| `scripts/check-reality-target.sh` | check `REALITY_HANDSHAKE` candidates **on the VPS** (TLS 1.3, X25519, h2, record sizes) |
 | `scripts/gen-secrets.sh` | generate UUIDs, Reality keypair, passwords |
 | `scripts/firewall.sh` | ufw: only proxy ports public; admin via Tailscale only |
 | `scripts/firewall-cdn.sh` | open the CDN fallback port (2053) to Cloudflare IPs only (optional) |
@@ -79,12 +95,46 @@ cd vps && ./bootstrap.sh
 sudo ../scripts/firewall.sh
 
 # 4. Client config.
-cd client && ./render-client-config.sh   # produces clash-meta.yaml -> import into a Clash.Meta client
+cd client && ./render-client-config.sh   # clash-meta.yaml + rules/*.mrs -> see "Client host checklist"
 #    OR for non-Clash clients (Shadowrocket, v2rayN, sing-box apps):
 #    ./render-share-links.sh              # produces share-links.txt + subscription.txt (local import)
 ```
 
-Validate before/after: `docker compose run --rm sing-box check -c /etc/sing-box/config.json`.
+Validate before/after: `scripts/test-configs.sh` locally (needs a mihomo binary and sing-box or
+Docker), and `docker compose run --rm sing-box check -c /etc/sing-box/config.json` on the VPS.
+
+### Validating locally
+
+`scripts/test-configs.sh` (run it before every deploy) needs:
+
+- **mihomo** — Clash Verge Rev's bundled `verge-mihomo.exe` is found automatically on Windows;
+  elsewhere put `mihomo` on PATH or set `MIHOMO_BIN`.
+- **sing-box at the version pinned in `.env`**, so the VPS config is checked by the same core the
+  VPS runs: either Docker is running, or unpack the release once under `.tools/` (gitignored),
+  where the scripts find it by itself:
+
+  ```bash
+  ver=$(grep '^SINGBOX_VERSION=' .env | cut -d= -f2); v=${ver#v}
+  gh release download "$ver" -R SagerNet/sing-box -p "sing-box-$v-windows-amd64.zip" -D .tools
+  unzip -q -o ".tools/sing-box-$v-windows-amd64.zip" -d .tools
+  ```
+
+  On Linux use `linux-amd64.tar.gz`, on Apple silicon `darwin-arm64.tar.gz` (`tar -xzf … -C .tools`).
+  Or point `SINGBOX_BIN` at any sing-box binary of that version.
+- **jq, openssl, curl.** The suite stops with "prerequisites missing" if any of these is absent.
+
+### Client host checklist (Clash Verge Rev on Windows)
+
+1. Import `client/clash-meta.yaml` as a new **local** profile and select it. Delete older profiles
+   rendered from this repo, so an outdated `url-test` profile cannot be re-selected by accident.
+2. Copy `client/rules/*.mrs` into `%APPDATA%\io.github.clash-verge-rev.clash-verge-rev\rules\`.
+   Without them, mihomo holds traffic for a few seconds at first start while it downloads them.
+3. Settings → turn **IPv6 off** (Verge overrides the profile's `ipv6: false` with its own switch),
+   and if you use TUN, set the stack to **mixed**.
+4. Check the split: in the Connections view, CN sites show `RuleSet(cn-domain)` → DIRECT, foreign
+   sites `Match` → `PROXY[hy2-vps]`. A China-reachable site that goes to PROXY belongs in
+   `direct-extra` in the template; re-render and re-import.
+5. To test one path without changing the selection: `client/probe-node.sh reality-vps 5`.
 
 ## Code delivery & disaster recovery
 
@@ -199,6 +249,26 @@ See "Two exit modes" above — one click in the dashboard.
 - The `mac-auto` selector already failed sensitive traffic over to the VPS; you're not offline.
 - SSH in over Tailscale (out-of-band): `ssh you@mac-mini-exit` (works even when the data path is dead).
 - Re-run `mac-mini/setup.sh` to rebuild. Check the daemon: `sudo launchctl print system/com.meshrouter.singbox`.
+- `mac-auto` keeps the Mac while it answers its health check, even when it is up to 1 s slower than
+  the VPS's own exit (`tolerance: 1000`); it switches to `direct` only when the Mac stops answering.
+
+### D. Is the line itself the problem? (peak-hour test)
+
+Run on the China-side machine with the proxy client's TUN mode **off** (otherwise `tracert`
+shows one hop), between 20:00 and 23:00 local time, on two or three evenings:
+
+```
+ping -n 100 <VPS_HOST>
+tracert -d <VPS_HOST>
+```
+
+- `202.97.x.x` hops are China Telecom's 163 backbone, `59.43.x.x` would be CN2;
+  `129.250.x.x` is NTT (AS2914), the VPS's upstream. The healthy path seen on 2026-10-16 was
+  163 → NTT, 186 ms, 0 % loss at 02:10.
+- More than 5 % loss or an average above 300 ms in the evening means the 163 → NTT path is
+  congested: hy2 and Reality will both suffer whatever the config. The fix is a different line
+  (CN2 GIA / CMI) or a region closer to China, not another config change — Runbook A covers moving.
+- Record the results in `docs/2026-10-16-stability-research.md`.
 
 ## Security notes
 
@@ -218,6 +288,16 @@ should opt into `trusted-exit`, per-domain. `api.anthropic.com` / `api.openai.co
 direct (datacenter IPs are normal for API traffic).
 
 ## Version pinning
+
+sing-box logs at `info`. To diagnose, re-run `SINGBOX_LOG_LEVEL=debug ./bootstrap.sh`, read
+`docker logs sing-box`, then re-run plain `./bootstrap.sh` — Docker's json log is not rotated, so
+do not leave `debug` on.
+
+Before bumping past 1.11: the inbound fields `sniff` / `sniff_override_destination` are
+deprecated (removed in 1.13) and become a `route.rules` entry with `"action": "sniff"`; the Dial
+Field `domain_strategy` used for IPv4-only dialing is deprecated in 1.12 (removed in 1.14) in
+favour of `domain_resolver` with `"strategy": "ipv4_only"`, and the DNS server format changes in
+1.12. Port all three, then run `scripts/test-configs.sh` with the new `SINGBOX_VERSION`.
 
 `/.env` pins image tags. sing-box configs target the **1.11.x** schema. Bumping sing-box to 1.12+
 may require config changes (the DNS server format changed). Always `sing-box check` after a bump.

@@ -5,12 +5,17 @@
 # Rendered from this template by client/render-client-config.sh (fills ${...} from secrets).
 # DNS uses fake-ip so foreign domains are NEVER resolved locally — the hostname is forwarded
 # inside the proxy protocol to the VPS, which resolves remotely (no DNS poisoning / leaks).
+#
+# Routing data comes from MetaCubeX/meta-rules-dat (the same v2fly-based data as the built-in
+# geosite, but refreshed daily as .mrs rule sets) plus Cats-Team/AdRules for ad blocking. The
+# built-in GEOSITE,cn rule stays as a safety net: if no rule set could be downloaded yet, CN
+# domains still go DIRECT. Your own always-direct domains go in `direct-extra` below.
 
 mixed-port: 7890
 allow-lan: false
 mode: rule
 log-level: info
-ipv6: false
+ipv6: false                         # Clash Verge overrides this from its own IPv6 switch — turn that off too
 unified-delay: true
 tcp-concurrent: true
 find-process-mode: 'off'
@@ -24,16 +29,33 @@ dns:
   ipv6: false
   enhanced-mode: fake-ip
   fake-ip-range: 198.18.0.1/16
-  fake-ip-filter:
+  default-nameserver:               # plain-IP resolvers that bootstrap the DoH hostnames below
+    - 223.5.5.5
+    - 119.29.29.29
+  nameserver:                       # used only for CN / fake-ip-filter domains
+    - https://dns.alidns.com/dns-query
+    - https://doh.pub/dns-query
+  proxy-server-nameserver:          # resolves the proxy servers' own hostnames, direct
+    - https://dns.alidns.com/dns-query
+  fake-ip-filter:                   # these get real IPs (they go DIRECT anyway)
     - '*.lan'
     - '*.local'
-    - 'geosite:cn'
     - 'geosite:private'
-  nameserver:                       # used only for CN / fake-ip-filter domains
-    - https://223.5.5.5/dns-query
-    - https://120.53.53.53/dns-query
-  proxy-server-nameserver:          # resolves the proxy server's own address, direct
-    - https://223.5.5.5/dns-query
+    - 'geosite:cn'
+    - 'rule-set:cn-domain'
+    - 'rule-set:direct-extra'
+
+# Recover the hostname of connections that arrive as a bare IP (DoH, QUIC, apps with hard-coded IPs)
+# so the domain rules below still apply to them.
+sniffer:
+  enable: true
+  sniff:
+    TLS:
+      ports: [443, 8443]
+    HTTP:
+      ports: [80]
+    QUIC:
+      ports: [443]
 
 proxies:
   - name: reality-vps
@@ -61,8 +83,8 @@ proxies:
       - h3
 
   # Optional emergency path — survives the VPS IP being GFW-blocked: the client only ever talks to
-  # Cloudflare's edge IPs, and Cloudflare reaches your origin from outside the GFW. Stays dead in the
-  # url-test group until you set it up (docs/cloudflare-fallback.md), so it's harmless to ship enabled.
+  # Cloudflare's edge IPs, and Cloudflare reaches your origin from outside the GFW. Stays dead (and
+  # skipped by the fallback group) until you set it up (docs/cloudflare-fallback.md).
   - name: cdn-fallback
     type: vless
     server: ${CDN_DOMAIN}           # Cloudflare-proxied (orange-cloud) subdomain
@@ -78,20 +100,66 @@ proxies:
     client-fingerprint: chrome
 
 proxy-groups:
+  # `fallback`, not url-test: every new connection uses the FIRST node in this list whose last health
+  # check succeeded. url-test chased the lowest probe latency across three very different paths and,
+  # when no node looked alive, fell back to its first entry (reality) — that flapping was the
+  # "frequent disconnects". When nothing is alive, fallback also uses the first entry, so hy2 —
+  # the path that has stayed up — must stay first. cdn-fallback is the slow last resort.
   - name: PROXY
-    type: url-test                  # automatic failover: Reality primary, Hysteria2 backup, CDN last resort
+    type: fallback
     proxies:
-      - reality-vps
       - hy2-vps
+      - reality-vps
       - cdn-fallback
     url: 'https://www.gstatic.com/generate_204'
-    interval: 120                   # how fast a dead node is detected -> failover. Matters most when the
-                                    # VPS IP gets blocked (reality+hy2 both die -> fail over to cdn).
-    tolerance: 100                  # don't switch unless another node is >100ms faster (stops reality<->hy2 churn)
+    expected-status: 204            # only a real 204 counts as alive (a captive/blocked page does not)
+    interval: 60                    # health-check cadence in seconds
+    lazy: false                     # keep probing standby nodes so failover does not wait for a miss
+    # timeout / max-failed-times keep mihomo's defaults (5000 ms / 5): tighter values make one slow
+    # probe on hy2 move every new connection elsewhere.
+
+rule-providers:
+  # Your own always-direct domains: China-reachable sites the lists below miss. `+.` = domain and
+  # all subdomains. Edit here and re-render; no extra file to copy around.
+  direct-extra:
+    type: inline
+    behavior: domain
+    payload:
+      - '+.mirrors.tuna.tsinghua.edu.cn'
+  # Remote rule sets: fetched DIRECT from jsDelivr (reachable from China), refreshed daily, cached
+  # under rules/. render-client-config.sh pre-downloads them into client/rules/ — copy that folder
+  # into the client's config directory so the first start does not depend on the download.
+  cn-domain:
+    type: http
+    behavior: domain
+    format: mrs
+    url: https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/cn.mrs
+    path: ./rules/cn-domain.mrs
+    interval: 86400
+    proxy: DIRECT
+  cn-ip:
+    type: http
+    behavior: ipcidr
+    format: mrs
+    url: https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geoip/cn.mrs
+    path: ./rules/cn-ip.mrs
+    interval: 86400
+    proxy: DIRECT
+  ads:
+    type: http
+    behavior: domain
+    format: mrs
+    url: https://adrules.top/adrules-mihomo.mrs
+    path: ./rules/ads.mrs
+    interval: 86400
+    proxy: DIRECT
 
 rules:
   - GEOIP,private,DIRECT,no-resolve
-  - GEOSITE,category-ads-all,REJECT
-  - GEOSITE,cn,DIRECT
-  - GEOIP,CN,DIRECT,no-resolve
+  - RULE-SET,direct-extra,DIRECT      # your overrides first, so they can correct any list below
+  - RULE-SET,ads,REJECT
+  - RULE-SET,cn-domain,DIRECT
+  - GEOSITE,cn,DIRECT                 # built-in copy of the same data: safety net when rule sets are missing
+  - RULE-SET,cn-ip,DIRECT,no-resolve  # only for connections that arrive as a CN IP; never resolves a domain
+  - GEOIP,CN,DIRECT,no-resolve        # built-in copy of the same: safety net for hard-coded CN IPs (WeChat)
   - MATCH,PROXY
