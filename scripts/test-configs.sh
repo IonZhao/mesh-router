@@ -87,6 +87,22 @@ else
   ko "vps_log_level_defaults_to_info (bootstrap.sh does not default SINGBOX_LOG_LEVEL to info)"
 fi
 
+# --- Reality handshake-target checker (fixtures = saved `openssl s_client -msg` output) -----------
+R="$SCRIPT_DIR/check-reality-target.sh"
+TD="$SCRIPT_DIR/testdata"
+# Small records, TLS 1.3 + h2 + X25519; a 0x2100-byte NewSessionTicket AFTER the handshake must not count.
+expect 0 reality_target_ok_passes "PASS" \
+  env CHECK_REALITY_INPUT="$TD/reality-target-ok.msg" bash "$R" example.test
+# One server record over REALITY's limit (5-byte header + length > 8192) is a hard failure.
+expect 1 reality_target_oversized_record_fails "record 8273 bytes" \
+  env CHECK_REALITY_INPUT="$TD/reality-target-big-record.msg" bash "$R" example.test
+# The whole server flight above 8192 bytes can overflow REALITY's buffer between reads.
+expect 1 reality_target_oversized_flight_fails "flight 8464 bytes" \
+  env CHECK_REALITY_INPUT="$TD/reality-target-big-flight.msg" bash "$R" example.test
+# REALITY targets must negotiate h2.
+expect 1 reality_target_without_h2_fails "no h2" \
+  env CHECK_REALITY_INPUT="$TD/reality-target-no-h2.msg" bash "$R" example.test
+
 echo
 echo "$pass passed, $fail failed"
 [[ "$fail" -eq 0 ]]

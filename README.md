@@ -28,6 +28,13 @@ VPS (any region, sing-box)        trust split: sensitive -> trusted-exit, else -
   innocuous name; **avoid words like `proxy`/`vpn`**, since the hostname lands in public
   Certificate Transparency logs and the Hysteria2 TLS SNI) at the VPS IP. Reality
   (port 443) does *not* use your domain — it borrows a real site's TLS handshake.
+- **A Reality handshake target that fits REALITY's buffer.** `REALITY_HANDSHAKE` must be a
+  foreign site with TLS 1.3, X25519 and h2 whose handshake records stay within 8192 bytes
+  (sing-box/Xray's REALITY server drops the connection otherwise and logs
+  `processed invalid connection`; the client sees `connect error: EOF`). CDN-fronted sites send
+  different certificate chains to different places, so check candidates **from the VPS**:
+  `scripts/check-reality-target.sh dl.google.com www.apple.com` — use one that prints `PASS`.
+  `www.microsoft.com`, the old default here, can exceed the limit.
 - **IPv6 is not needed on the VPS.** sing-box resolves and dials IPv4 only (`dns.strategy`,
   the `direct` outbound and the Reality handshake are all `ipv4_only`). Without that, a host
   with no IPv6 route gets IPv6-only answers now and then and fails with `network is unreachable`

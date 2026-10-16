@@ -196,7 +196,7 @@
     <tr><th>Field</th><th>Value</th></tr>
     <tr><td><code>STATIC_DOMAIN</code></td><td><code>static.yourdomain.com</code> (from Phase 1)</td></tr>
     <tr><td><code>ACME_EMAIL</code></td><td>your email (Let's Encrypt notices)</td></tr>
-    <tr><td><code>REALITY_HANDSHAKE</code></td><td><code>www.microsoft.com</code> (a TLS1.3 site to impersonate; the default is fine)</td></tr>
+    <tr><td><code>REALITY_HANDSHAKE</code></td><td><code>dl.google.com</code> (a TLS1.3 site to impersonate; on the VPS, <code>scripts/check-reality-target.sh dl.google.com</code> must print <code>PASS</code> — avoid <code>www.microsoft.com</code>, whose certificate records can exceed Reality's 8192-byte limit)</td></tr>
     <tr><td><code>VPS_HOST</code></td><td>your VPS public IP (Reality connects by IP)</td></tr>
     <tr><td><code>TS_AUTHKEY</code></td><td>auth key #1 from Phase 2</td></tr>
     <tr><td><code>MAC_TAILSCALE_IP</code></td><td>leave as placeholder — Phase 4 fills it</td></tr>
