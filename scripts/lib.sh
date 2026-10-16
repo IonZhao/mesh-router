@@ -15,6 +15,30 @@ find_mihomo() {
   command -v mihomo 2>/dev/null || true
 }
 
+# The sing-box version the VPS runs (SINGBOX_VERSION in the repo-root .env), e.g. v1.11.14.
+pinned_singbox_version() {
+  local root
+  root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+  grep -E '^SINGBOX_VERSION=' "$root/.env" | cut -d= -f2 | tr -d '\r'
+}
+
+# Print the path of a sing-box binary for local checks, or nothing when none is found.
+# Order: $SINGBOX_BIN, the pinned version unpacked under .tools/ (README: Validating locally),
+# `sing-box` on PATH.
+find_singbox() {
+  local root ver f
+  if [[ -n "${SINGBOX_BIN:-}" ]]; then
+    printf '%s\n' "$SINGBOX_BIN"
+    return
+  fi
+  root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+  ver="$(pinned_singbox_version)"
+  for f in "$root"/.tools/sing-box-"${ver#v}"-*/sing-box "$root"/.tools/sing-box-"${ver#v}"-*/sing-box.exe; do
+    [[ -x "$f" ]] && { printf '%s\n' "$f"; return; }
+  done
+  command -v sing-box 2>/dev/null || true
+}
+
 # Write well-formed throwaway values for every secret the templates use (never real ones).
 write_throwaway_env() {
   local out="$1" h1 h2

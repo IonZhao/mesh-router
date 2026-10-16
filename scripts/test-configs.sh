@@ -19,6 +19,20 @@ if [[ -n "${KEEP_TEST_TMP:-}" ]]; then echo "keeping $TMP"; else trap 'rm -rf "$
 pass=0
 fail=0
 
+# Prerequisites first: a missing tool must read as "missing tool", not as a failing case.
+# shellcheck source=lib.sh
+source "$SCRIPT_DIR/lib.sh"
+missing=""
+if [[ -z "$(find_singbox)" ]] && ! { command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; }; then
+  missing+=" sing-box $(pinned_singbox_version) (unpack it under .tools/, set SINGBOX_BIN, or start Docker);"
+fi
+[[ -z "$(find_mihomo)" ]] && missing+=" mihomo (set MIHOMO_BIN or put it on PATH);"
+for t in jq openssl curl awk; do command -v "$t" >/dev/null 2>&1 || missing+=" $t;"; done
+if [[ -n "$missing" ]]; then
+  echo "FAIL prerequisites missing:$missing see README \"Validating locally\""
+  exit 1
+fi
+
 ok() { pass=$((pass + 1)); echo "PASS $1"; }
 ko() { fail=$((fail + 1)); echo "FAIL $1"; }
 
@@ -90,6 +104,36 @@ expect 1 vps_invalid_value_rejected "FAIL vps: sing-box check" \
 sed -E 's/"tag": "direct"/"tag": "${NOT_IN_BOOTSTRAP_VARS}"/' "$VPS_TPL" >"$TMP/unknown-var.json.template"
 expect 1 vps_unrendered_variable_rejected "not substituted by bootstrap.sh VARS: NOT_IN_BOOTSTRAP_VARS" \
   env VPS_TEMPLATE="$TMP/unknown-var.json.template" bash "$V" --vps
+
+# The Docker fallback must hand Docker paths its daemon can see: on a Windows host (Docker Desktop
+# + Git Bash) that means native drive paths, not Git Bash's /tmp. A stand-in `docker` checks the
+# -v sources the way Docker Desktop would resolve them.
+stub="$TMP/stub-bin"
+mkdir -p "$stub"
+cat >"$stub/docker" <<'STUB'
+#!/usr/bin/env bash
+[[ "$1" == "info" ]] && exit 0
+[[ "$1" == "run" ]] || exit 2
+shift
+while [[ $# -gt 0 ]]; do
+  if [[ "$1" == "-v" ]]; then
+    if [[ "$2" =~ ^([A-Za-z]:/[^:]*):(/.*)$ ]]; then src="${BASH_REMATCH[1]}"
+    elif [[ "$2" =~ ^(/[^:]*):(/.*)$ ]]; then src="${BASH_REMATCH[1]}"
+    else echo "stub-docker: unparsable mount $2"; exit 1; fi
+    if command -v cygpath >/dev/null 2>&1 && [[ ! "$src" =~ ^[A-Za-z]:/ ]]; then
+      echo "stub-docker: Docker Desktop cannot see $src"; exit 1
+    fi
+    [[ -e "$src" ]] || { echo "stub-docker: missing $src"; exit 1; }
+    shift 2
+  else
+    shift
+  fi
+done
+echo "stub-docker: ok"
+STUB
+chmod +x "$stub/docker"
+expect 0 vps_docker_fallback_uses_daemon_visible_paths "sing-box check passed \(docker" \
+  env SINGBOX_USE_DOCKER=1 PATH="$stub:$PATH" bash "$V" --vps
 
 # mihomo rejects a rule that points at a rule-provider that does not exist.
 awk '{print} /^rules:/{print "  - RULE-SET,no-such-provider,DIRECT"}' "$CLIENT_TPL" >"$TMP/bad-rule.yaml.template"

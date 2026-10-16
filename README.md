@@ -103,6 +103,26 @@ cd client && ./render-client-config.sh   # clash-meta.yaml + rules/*.mrs -> see 
 Validate before/after: `scripts/test-configs.sh` locally (needs a mihomo binary and sing-box or
 Docker), and `docker compose run --rm sing-box check -c /etc/sing-box/config.json` on the VPS.
 
+### Validating locally
+
+`scripts/test-configs.sh` (run it before every deploy) needs:
+
+- **mihomo** — Clash Verge Rev's bundled `verge-mihomo.exe` is found automatically on Windows;
+  elsewhere put `mihomo` on PATH or set `MIHOMO_BIN`.
+- **sing-box at the version pinned in `.env`**, so the VPS config is checked by the same core the
+  VPS runs: either Docker is running, or unpack the release once under `.tools/` (gitignored),
+  where the scripts find it by itself:
+
+  ```bash
+  ver=$(grep '^SINGBOX_VERSION=' .env | cut -d= -f2); v=${ver#v}
+  gh release download "$ver" -R SagerNet/sing-box -p "sing-box-$v-windows-amd64.zip" -D .tools
+  unzip -q -o ".tools/sing-box-$v-windows-amd64.zip" -d .tools
+  ```
+
+  On Linux use `linux-amd64.tar.gz`, on Apple silicon `darwin-arm64.tar.gz` (`tar -xzf … -C .tools`).
+  Or point `SINGBOX_BIN` at any sing-box binary of that version.
+- **jq, openssl, curl.** The suite stops with "prerequisites missing" if any of these is absent.
+
 ### Client host checklist (Clash Verge Rev on Windows)
 
 1. Import `client/clash-meta.yaml` as a new **local** profile and select it. Delete older profiles

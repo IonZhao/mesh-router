@@ -9,8 +9,9 @@
 #   scripts/validate-configs.sh --vps        # VPS only
 #   scripts/validate-configs.sh --client     # client only
 #
-# Binaries:  sing-box -> $SINGBOX_BIN, else `sing-box` on PATH, else Docker image
-#            ghcr.io/sagernet/sing-box:$SINGBOX_VERSION (from .env), else the check is skipped.
+# Binaries:  sing-box -> $SINGBOX_BIN, else .tools/sing-box-<version pinned in .env>-*/sing-box,
+#            else `sing-box` on PATH, else Docker image ghcr.io/sagernet/sing-box:<pinned version>
+#            (SINGBOX_USE_DOCKER=1 prefers Docker), else the check is skipped.
 #            mihomo   -> $MIHOMO_BIN, else Clash Verge's bundled core, else `mihomo` on PATH.
 # Overrides: VPS_TEMPLATE, CLIENT_TEMPLATE (used by scripts/test-configs.sh).
 #
@@ -84,13 +85,9 @@ check_vps() {
     -out "$(native "$work/root/acme/cdn-selfsigned.crt")" \
     -subj "/CN=cdn.local" >/dev/null 2>&1 || { bad "vps: openssl could not create the test cert"; return; }
 
-  if [[ -n "${SINGBOX_BIN:-}" ]]; then
-    sb="$SINGBOX_BIN"
-  elif command -v sing-box >/dev/null 2>&1; then
-    sb="$(command -v sing-box)"
-  fi
+  sb="$(find_singbox)"
 
-  if [[ -n "$sb" ]]; then
+  if [[ -n "$sb" && -z "${SINGBOX_USE_DOCKER:-}" ]]; then
     sed "s#/etc/sing-box/#$(native "$work/root")/#g" "$work/config.json" >"$work/config.local.json"
     if "$sb" check -c "$(native "$work/config.local.json")" >"$work/check.log" 2>&1; then
       ok "vps: sing-box check passed ($("$sb" version 2>/dev/null | head -1))"
@@ -99,18 +96,19 @@ check_vps() {
     fi
   elif command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
     local ver
-    ver="$(grep -E '^SINGBOX_VERSION=' "$REPO_ROOT/.env" | cut -d= -f2)"
+    ver="$(pinned_singbox_version)"
+    # Mount sources in native form: Docker Desktop cannot see Git Bash's /tmp.
     if MSYS_NO_PATHCONV=1 docker run --rm \
-         -v "$work/config.json:/c.json:ro" \
-         -v "$work/root/rulesets:/etc/sing-box/rulesets:ro" \
-         -v "$work/root/acme:/etc/sing-box/acme:ro" \
-         "ghcr.io/sagernet/sing-box:${ver:-v1.11.14}" check -c /c.json >"$work/check.log" 2>&1; then
+         -v "$(native "$work/config.json"):/c.json:ro" \
+         -v "$(native "$work/root/rulesets"):/etc/sing-box/rulesets:ro" \
+         -v "$(native "$work/root/acme"):/etc/sing-box/acme:ro" \
+         "ghcr.io/sagernet/sing-box:${ver}" check -c /c.json >"$work/check.log" 2>&1; then
       ok "vps: sing-box check passed (docker ${ver})"
     else
       bad "vps: sing-box check: $(tail -3 "$work/check.log" | tr '\n' ' ')"
     fi
   else
-    warn "vps: no sing-box binary and Docker is not available; sing-box check skipped (bootstrap.sh runs it on the VPS)"
+    warn "vps: no sing-box $(pinned_singbox_version) binary and Docker is not available; sing-box check skipped (README: Validating locally)"
   fi
 }
 
