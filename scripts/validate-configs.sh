@@ -47,32 +47,8 @@ warn() { echo "WARN $*"; }
 # Native-path form of a POSIX path (Windows binaries need D:/..., everything else is unchanged).
 native() { if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s\n' "$1"; fi; }
 
-# ---- throwaway values (well-formed, never real) ---------------------------------------------------
-uuid4() {
-  local h
-  h="$(openssl rand -hex 16)"
-  printf '%s-%s-4%s-a%s-%s\n' "${h:0:8}" "${h:8:4}" "${h:13:3}" "${h:17:3}" "${h:20:12}"
-}
-b64url32() { openssl rand 32 | base64 | tr '+/' '-_' | tr -d '=\n'; }
-
-cat >"$TMP/throwaway.env" <<EOF
-VPS_HOST=203.0.113.45
-STATIC_DOMAIN=static.example.com
-CDN_DOMAIN=cdn.example.com
-ACME_EMAIL=ops@example.com
-REALITY_HANDSHAKE=dl.google.com
-MAC_TAILSCALE_IP=100.64.0.1
-VLESS_UUID=$(uuid4)
-MAC_VLESS_UUID=$(uuid4)
-REALITY_PRIVATE_KEY=$(b64url32)
-REALITY_PUBLIC_KEY=$(b64url32)
-REALITY_SHORT_ID=0123456789abcdef
-HY2_PASSWORD=$(openssl rand -hex 12)
-HY2_OBFS_PASSWORD=$(openssl rand -hex 12)
-CLASH_API_SECRET=$(openssl rand -hex 12)
-CDN_WS_PATH=$(openssl rand -hex 12)
-SINGBOX_LOG_LEVEL=info
-EOF
+# ---- throwaway values (well-formed, never real) ----------------------------------------------------
+write_throwaway_env "$TMP/throwaway.env"
 
 # ---- VPS ----------------------------------------------------------------------------------------
 check_vps() {

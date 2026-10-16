@@ -15,7 +15,7 @@ VPS_TPL="$REPO_ROOT/vps/sing-box/config.json.template"
 CLIENT_TPL="$REPO_ROOT/client/clash-meta.yaml.template"
 
 TMP="$(mktemp -d)"
-trap 'rm -rf "$TMP"' EXIT
+if [[ -n "${KEEP_TEST_TMP:-}" ]]; then echo "keeping $TMP"; else trap 'rm -rf "$TMP"' EXIT; fi
 pass=0
 fail=0
 
@@ -102,6 +102,106 @@ expect 1 reality_target_oversized_flight_fails "flight 8464 bytes" \
 # REALITY targets must negotiate h2.
 expect 1 reality_target_without_h2_fails "no h2" \
   env CHECK_REALITY_INPUT="$TD/reality-target-no-h2.msg" bash "$R" example.test
+
+# --- client behaviour, as mihomo itself sees it ---------------------------------------------------
+# Render the client template with throwaway values, point every remote rule set at an unreachable
+# URL with an empty rules/ dir (a first start with no mirror reachable), run it in an isolated mihomo
+# and ask mihomo what it built and which rule each sample domain hits.
+client_runtime() {
+  local bin work api="127.0.0.1:17891" port="17890" pid i
+  # shellcheck source=lib.sh
+  source "$SCRIPT_DIR/lib.sh"
+  bin="$(find_mihomo)"
+  if [[ -z "$bin" ]]; then ko "client_runtime (no mihomo binary; set MIHOMO_BIN)"; return; fi
+  work="$TMP/client-rt"
+  mkdir -p "$work/rules"
+  write_throwaway_env "$TMP/client.env"
+  if ! MESH_SECRETS_FILES="$TMP/client.env" MESH_CLIENT_OUT="$work/rendered.yaml" MESH_SKIP_RULE_DOWNLOAD=1 \
+       bash "$REPO_ROOT/client/render-client-config.sh" >"$work/render.log" 2>&1; then
+    ko "client_runtime (render failed)"; tail -3 "$work/render.log"; return
+  fi
+  awk -v port="$port" '
+    /^[A-Za-z][A-Za-z0-9-]*:/ { section = $1 }
+    /^mixed-port:/ { print "mixed-port: " port; next }
+    /^log-level:/  { print "log-level: info"; next }
+    section == "rule-providers:" && /^[[:space:]]+url:/ { sub(/url:.*/, "url: http://127.0.0.1:9/unreachable") }
+    { print }
+  ' "$work/rendered.yaml" >"$work/config.yaml"
+  printf 'external-controller: %s\n' "$api" >>"$work/config.yaml"
+  seed_geo_files "$bin" "$work"
+
+  timeout 90 "$bin" -d "$(cygpath -m "$work" 2>/dev/null || echo "$work")" \
+    -f "$(cygpath -m "$work/config.yaml" 2>/dev/null || echo "$work/config.yaml")" >"$work/mihomo.log" 2>&1 &
+  pid=$!
+  for i in $(seq 1 40); do
+    curl -s -o /dev/null --noproxy '*' --max-time 1 "http://$api/version" && break
+    sleep 0.5
+  done
+  if ! curl -s -o /dev/null --noproxy '*' --max-time 1 "http://$api/version"; then
+    ko "client_runtime (mihomo did not start)"; tail -5 "$work/mihomo.log" | sed 's/^/    /'
+    kill "$pid" 2>/dev/null; return
+  fi
+
+  curl -s --noproxy '*' "http://$api/proxies/PROXY" >"$work/group.json"
+  curl -s --noproxy '*' "http://$api/providers/rules" >"$work/providers.json"
+  jq_true client_group_is_fallback_hy2_first "$work/group.json" \
+    '.type == "Fallback" and .all == ["hy2-vps", "reality-vps", "cdn-fallback"]'
+  jq_true client_group_requires_http_204 "$work/group.json" '.expectedStatus == "204"'
+  jq_true client_rule_providers_loaded "$work/providers.json" \
+    '(.providers | keys) as $k | ["ads", "cn-domain", "cn-ip", "direct-extra"] - $k == []'
+
+  # mihomo holds connections for a few seconds while rule providers are still initialising
+  # (measured: ~1-6 s with unreachable URLs and no cached files); wait until it routes traffic.
+  for i in $(seq 1 60); do
+    curl -s -o /dev/null --max-time 4 -x "http://127.0.0.1:$port" "http://www.baidu.com/" || true
+    grep -q 'www\.baidu\.com' "$work/mihomo.log" && break
+    sleep 0.5
+  done
+  for host in mirrors.tuna.tsinghua.edu.cn www.example.com; do
+    curl -s -o /dev/null --max-time 8 -x "http://127.0.0.1:$port" "http://$host/" || true
+  done
+  sleep 1
+  kill "$pid" 2>/dev/null
+  wait "$pid" 2>/dev/null
+
+  rule_hit() {  # rule_hit <case> <host> <rule-regex>
+    if grep -qE "$2:80 match $3|match ${3//\(/\/}.*$2:80|\($3\).*$2:80|$2:80.*$3" "$work/mihomo.log"; then ok "$1"
+    else ko "$1 ($2 did not hit /$3/)"; grep -E "$2" "$work/mihomo.log" | tail -2 | sed 's/^/    /'; fi
+  }
+  rule_hit client_override_list_wins mirrors.tuna.tsinghua.edu.cn 'RuleSet.direct-extra'
+  rule_hit client_cn_stays_direct_without_rule_sets www.baidu.com 'GeoSite.cn'
+  rule_hit client_foreign_goes_to_proxy www.example.com 'Match'
+}
+client_runtime
+
+# --- render-client-config.sh pre-downloads the remote rule sets ------------------------------------
+render_preseed() {
+  local work="$TMP/preseed" fixture url
+  mkdir -p "$work"
+  # shellcheck source=lib.sh
+  source "$SCRIPT_DIR/lib.sh"
+  write_throwaway_env "$TMP/preseed.env"
+  fixture="$SCRIPT_DIR/testdata/reality-target-ok.msg"            # any file will do as a payload
+  url="file://$(cygpath -m "$fixture" 2>/dev/null | sed 's#^#/#' || echo "$fixture")"
+  # Every remote rule set reachable (as a local file) -> each lands under rules/ in the rules dir.
+  awk -v u="$url" '/^[A-Za-z]/{s=$1} s=="rule-providers:" && /^[[:space:]]+url:/{sub(/url:.*/, "url: " u)} {print}' \
+    "$CLIENT_TPL" >"$work/ok.template"
+  expect 0 render_preseeds_rule_sets "downloaded: rules/cn-domain.mrs" \
+    env MESH_SECRETS_FILES="$TMP/preseed.env" MESH_CLIENT_TPL="$work/ok.template" \
+        MESH_CLIENT_OUT="$work/ok.yaml" MESH_RULES_DIR="$work/ok" bash "$REPO_ROOT/client/render-client-config.sh"
+  if cmp -s "$fixture" "$work/ok/rules/cn-domain.mrs" && cmp -s "$fixture" "$work/ok/rules/ads.mrs"; then
+    ok render_preseed_files_match_source
+  else
+    ko "render_preseed_files_match_source (rules/ under $work/ok missing or different)"
+  fi
+  # Every remote rule set unreachable -> the render still succeeds and only warns.
+  awk '/^[A-Za-z]/{s=$1} s=="rule-providers:" && /^[[:space:]]+url:/{sub(/url:.*/, "url: http://127.0.0.1:9/unreachable")} {print}' \
+    "$CLIENT_TPL" >"$work/down.template"
+  expect 0 render_survives_unreachable_rule_sets "WARN: could not download" \
+    env MESH_SECRETS_FILES="$TMP/preseed.env" MESH_CLIENT_TPL="$work/down.template" \
+        MESH_CLIENT_OUT="$work/down.yaml" MESH_RULES_DIR="$work/down" bash "$REPO_ROOT/client/render-client-config.sh"
+}
+render_preseed
 
 echo
 echo "$pass passed, $fail failed"

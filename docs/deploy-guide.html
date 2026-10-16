@@ -264,7 +264,7 @@ sudo apt-get install -y gettext-base   # provides envsubst</code></pre></div>
 ./render-share-links.sh   # writes share-links.txt + subscription.txt</code></pre></div>
   <p>Paste a single URI from <code>share-links.txt</code>, or import <code>subscription.txt</code> as a <b>local subscription file</b> — that's the "one subscription" format you're used to.</p>
   <div class="callout warn"><b>Share links carry only the nodes, not the routing.</b> clash-meta.yaml also encodes CN-direct + fake-ip + failover; share links don't — in a non-Clash client you set up routing rules yourself. <code>subscription.txt</code> holds your keys: keep it private, never expose it publicly.</div>
-  <div class="callout"><b>How routing works (Clash path):</b> the client sends CN traffic direct and everything else to the VPS via a url-test group (Reality primary, Hysteria2 backup — auto failover). It does <b>not</b> decide which exit a site uses; the VPS does.</div>
+  <div class="callout"><b>How routing works (Clash path):</b> the client sends CN traffic direct and everything else to the VPS via a fallback group (Hysteria2 first, then Reality, then the CDN path — the first node that passes its health check carries the traffic). It does <b>not</b> decide which exit a site uses; the VPS does.</div>
   <label class="check"><input type="checkbox" data-step><span><span class="check-title">Rendered clash-meta.yaml</span></span></label>
   <label class="check"><input type="checkbox" data-step><span><span class="check-title">Imported into client &amp; connected</span></span></label>
 </section>

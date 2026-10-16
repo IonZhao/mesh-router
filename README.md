@@ -60,8 +60,13 @@ VPS (any region, sing-box)        trust split: sensitive -> trusted-exit, else -
 | `vps/bootstrap.sh` | fresh VPS → running stack |
 | `mac-mini/setup.sh` | fresh macOS → running exit node (brew + launchd, no Docker) |
 | `mac-mini/sing-box/config.json.template` | single Tailscale-only inbound → direct |
-| `client/clash-meta.yaml.template` | fake-ip, CN-direct, Reality/Hysteria2 url-test group (Clash.Meta clients) |
+| `client/clash-meta.yaml.template` | fake-ip; `fallback` group hy2 → Reality → CDN; meta-rules-dat CN rule sets + AdRules, `direct-extra` overrides, sniffer (Clash.Meta clients) |
+| `client/render-client-config.sh` | renders the template from secrets and pre-downloads the rule sets into `client/rules/` |
+| `client/probe-node.sh` | probe one node or group through an isolated mihomo (`probe-node.sh reality-vps 5`) |
 | `client/render-share-links.sh` | share-link URIs + base64 subscription for non-Clash clients (Shadowrocket, v2rayN, sing-box…) |
+| `scripts/validate-configs.sh` | render both templates with throwaway values; `sing-box check` + `mihomo -t` |
+| `scripts/test-configs.sh` | offline test suite for the templates and tooling (run before every deploy) |
+| `scripts/check-reality-target.sh` | check `REALITY_HANDSHAKE` candidates **on the VPS** (TLS 1.3, X25519, h2, record sizes) |
 | `scripts/gen-secrets.sh` | generate UUIDs, Reality keypair, passwords |
 | `scripts/firewall.sh` | ufw: only proxy ports public; admin via Tailscale only |
 | `scripts/firewall-cdn.sh` | open the CDN fallback port (2053) to Cloudflare IPs only (optional) |
@@ -90,12 +95,26 @@ cd vps && ./bootstrap.sh
 sudo ../scripts/firewall.sh
 
 # 4. Client config.
-cd client && ./render-client-config.sh   # produces clash-meta.yaml -> import into a Clash.Meta client
+cd client && ./render-client-config.sh   # clash-meta.yaml + rules/*.mrs -> see "Client host checklist"
 #    OR for non-Clash clients (Shadowrocket, v2rayN, sing-box apps):
 #    ./render-share-links.sh              # produces share-links.txt + subscription.txt (local import)
 ```
 
-Validate before/after: `docker compose run --rm sing-box check -c /etc/sing-box/config.json`.
+Validate before/after: `scripts/test-configs.sh` locally (needs a mihomo binary and sing-box or
+Docker), and `docker compose run --rm sing-box check -c /etc/sing-box/config.json` on the VPS.
+
+### Client host checklist (Clash Verge Rev on Windows)
+
+1. Import `client/clash-meta.yaml` as a new **local** profile and select it. Delete older profiles
+   rendered from this repo, so an outdated `url-test` profile cannot be re-selected by accident.
+2. Copy `client/rules/*.mrs` into `%APPDATA%\io.github.clash-verge-rev.clash-verge-rev\rules\`.
+   Without them, mihomo holds traffic for a few seconds at first start while it downloads them.
+3. Settings → turn **IPv6 off** (Verge overrides the profile's `ipv6: false` with its own switch),
+   and if you use TUN, set the stack to **mixed**.
+4. Check the split: in the Connections view, CN sites show `RuleSet(cn-domain)` → DIRECT, foreign
+   sites `Match` → `PROXY[hy2-vps]`. A China-reachable site that goes to PROXY belongs in
+   `direct-extra` in the template; re-render and re-import.
+5. To test one path without changing the selection: `client/probe-node.sh reality-vps 5`.
 
 ## Code delivery & disaster recovery
 

@@ -3,7 +3,7 @@
 A last-resort tunnel that **survives the VPS IP being GFW-blocked**. The China client only ever
 connects to Cloudflare's edge IPs (which the GFW generally doesn't block); Cloudflare then reaches
 your origin VPS from outside the GFW, so a China-side block of your VPS IP doesn't affect it. It's
-slower than Reality/Hysteria2, so the client's url-test only falls to it when the direct paths die.
+slower than Reality/Hysteria2, so the client's fallback group only uses it when hy2 and Reality are both down.
 
 ```
 China client ──TLS──▶ Cloudflare edge (cdn.yourdomain:2053) ──TLS(Full)──▶ VPS origin :2053
