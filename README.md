@@ -229,6 +229,26 @@ See "Two exit modes" above — one click in the dashboard.
 - The `mac-auto` selector already failed sensitive traffic over to the VPS; you're not offline.
 - SSH in over Tailscale (out-of-band): `ssh you@mac-mini-exit` (works even when the data path is dead).
 - Re-run `mac-mini/setup.sh` to rebuild. Check the daemon: `sudo launchctl print system/com.meshrouter.singbox`.
+- `mac-auto` keeps the Mac while it answers its health check, even when it is up to 1 s slower than
+  the VPS's own exit (`tolerance: 1000`); it switches to `direct` only when the Mac stops answering.
+
+### D. Is the line itself the problem? (peak-hour test)
+
+Run on the China-side machine with the proxy client's TUN mode **off** (otherwise `tracert`
+shows one hop), between 20:00 and 23:00 local time, on two or three evenings:
+
+```
+ping -n 100 <VPS_HOST>
+tracert -d <VPS_HOST>
+```
+
+- `202.97.x.x` hops are China Telecom's 163 backbone, `59.43.x.x` would be CN2;
+  `129.250.x.x` is NTT (AS2914), the VPS's upstream. The healthy path seen on 2026-10-16 was
+  163 → NTT, 186 ms, 0 % loss at 02:10.
+- More than 5 % loss or an average above 300 ms in the evening means the 163 → NTT path is
+  congested: hy2 and Reality will both suffer whatever the config. The fix is a different line
+  (CN2 GIA / CMI) or a region closer to China, not another config change — Runbook A covers moving.
+- Record the results in `docs/2026-10-16-stability-research.md`.
 
 ## Security notes
 
@@ -252,6 +272,12 @@ direct (datacenter IPs are normal for API traffic).
 sing-box logs at `info`. To diagnose, re-run `SINGBOX_LOG_LEVEL=debug ./bootstrap.sh`, read
 `docker logs sing-box`, then re-run plain `./bootstrap.sh` — Docker's json log is not rotated, so
 do not leave `debug` on.
+
+Before bumping past 1.11: the inbound fields `sniff` / `sniff_override_destination` are
+deprecated (removed in 1.13) and become a `route.rules` entry with `"action": "sniff"`; the Dial
+Field `domain_strategy` used for IPv4-only dialing is deprecated in 1.12 (removed in 1.14) in
+favour of `domain_resolver` with `"strategy": "ipv4_only"`, and the DNS server format changes in
+1.12. Port all three, then run `scripts/test-configs.sh` with the new `SINGBOX_VERSION`.
 
 `/.env` pins image tags. sing-box configs target the **1.11.x** schema. Bumping sing-box to 1.12+
 may require config changes (the DNS server format changed). Always `sing-box check` after a bump.

@@ -108,7 +108,7 @@
       "outbounds": ["mac-out", "direct"],
       "url": "https://www.gstatic.com/generate_204",
       "interval": "1m",
-      "tolerance": 100
+      "tolerance": 1000
     },
     {
       "type": "selector",

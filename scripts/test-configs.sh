@@ -79,6 +79,11 @@ jq_true vps_reality_handshake_ipv4_only "$VPS_TPL" \
 jq_true vps_no_orphan_dns_servers "$VPS_TPL" \
   '[.dns.servers[].tag] - [.dns.final] - [(.dns.rules // [])[].server] == []'
 
+# mac-auto prefers the Mac: urltest only leaves its current pick when another outbound is faster
+# by more than `tolerance`, and the always-faster direct must not win by a few hundred ms.
+jq_true vps_mac_auto_prefers_mac "$VPS_TPL" \
+  '[.outbounds[] | select(.tag == "mac-auto") | (.outbounds[0] == "mac-out" and .tolerance >= 1000)] == [true]'
+
 # Log verbosity is chosen at deploy time and defaults to info, never committed as debug.
 jq_true vps_log_level_is_a_deploy_variable "$VPS_TPL" '.log.level == "${SINGBOX_LOG_LEVEL}"'
 if grep -qE 'SINGBOX_LOG_LEVEL="\$\{SINGBOX_LOG_LEVEL:-info\}"' "$REPO_ROOT/vps/bootstrap.sh"; then
