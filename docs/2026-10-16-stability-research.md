@@ -61,3 +61,29 @@ MetaCubeX/meta-rules-dat `meta` branch (`geo/geosite/cn.mrs`, `geo/geoip/cn.mrs`
 - Record sizes of www.microsoft.com as seen *from the VPS* (one openssl command, plan Task 3 step 1).
 - Whether the VPS copy of `secrets/vps.env` matches the local one (`xray x25519 -i` check, plan Task 3).
 - Peak-hour loss on the 163 → NTT path (plan Task 8).
+
+## Implementation record (branch `stability-fixes`, 2026-10-16)
+
+Executed inline against `docs/superpowers/plans/2026-10-16-stability-fixes.md`; Tasks 1–4 and 8 done, Tasks 5–7 gated on the 24 h observation. Offline suite `scripts/test-configs.sh`: 29 passed. A fresh whole-branch review returned "with fixes"; all Critical/Important findings were fixed test-first, including scrubbing deployment identifiers from this file's first version (the branch history was rewritten before any push).
+
+Additional evidence gathered while implementing:
+
+- api.anthropic.com's IPv6 address is one of the targets in the VPS's `network is unreachable` lines; through hy2 it currently fails while google.com and github.com work. The IPv4-only change is the fix.
+- From the client machine, www.microsoft.com measured max record 5919 / flight 6470 bytes (PASS), so the oversized-record hypothesis is unconfirmed from China; the VPS run of `scripts/check-reality-target.sh` decides.
+- With no cached rule file and unreachable mirrors, mihomo v1.19.32 holds all connections for ~1–6 s at start (502 at 1 s, routed at 6 s). Pre-downloading `client/rules/` avoids it.
+- With the real rule sets: bilibili / jd / baidu → `RuleSet(cn-domain)` DIRECT, the override list → DIRECT, doubleclick → `RuleSet(ads)` REJECT, google / github / anthropic → `PROXY[hy2-vps]`. `update.hwdns.net` still goes to PROXY (candidate for `direct-extra`).
+
+Decisions that deviate from the plan (each: what — why — cost if wrong):
+
+- No second DNS server — sing-box 1.11 never queries a server that neither `final` nor a rule references — none; if debug logs show A-query failures, they need a real resolver fix.
+- Log level is `${SINGBOX_LOG_LEVEL}` (default `info`) instead of a committed `debug` — Docker's json log is not rotated — the variable must be passed when diagnosing.
+- Fallback order fixed at hy2 → reality → cdn — a dead reality is never "alive" with `expected-status: 204`, and this avoids a second re-import — if reality's probe passes while dials fail, hy2 outages briefly route to it.
+- The plan's inline openssl measurement became `scripts/check-reality-target.sh` with fixture tests, adding TLS 1.3 / X25519 / h2 / certificate checks and a whole-flight limit — may reject a target REALITY would usually accept (conservative).
+- Example and deploy-guide default `REALITY_HANDSHAKE` is `dl.google.com`; local and VPS secrets are unchanged until the VPS measurement — none; one-line change.
+- `GEOIP,CN,DIRECT,no-resolve` added after `cn-ip` (review finding) — a CN IP with no rule-set file would otherwise go abroad — none.
+- Sing-box deprecation notes live in README "Version pinning" (the template is strict JSON) — none.
+- Stale "url-test" wording also corrected in `docs/cloudflare-fallback.md` and `docs/deploy-guide.html` — none.
+
+Deferred minor findings: no test asserts which node the group picks when every node is dead; `client/probe-node.sh` should be run with the client's TUN off and its fixed 120 s timeout cuts very long runs; the template comment credits jsDelivr for the ads list (it is adrules.top); the suite header says "no network" although the client runtime cases dial baidu/tuna (they pass offline via dial-error lines); the checker does not verify the ChangeCipherSpec record. Pre-existing and out of scope: README says "2 inbounds" (there are 3); `cache_file.path` is not under the compose volume, so the `trusted-exit` selection resets on restart; Docker log rotation.
+
+Pending user steps: deploy the branch on the VPS (`./bootstrap.sh`), confirm `network is unreachable` → 0; run `scripts/check-reality-target.sh dl.google.com www.apple.com www.microsoft.com` on the VPS and set `REALITY_HANDSHAKE` to a PASS target on both sides; `client/probe-node.sh reality-vps 5` → 5/5; import the new client profile (README "Client host checklist"); observe 24 h (Task 5); peak-hour line test (README Runbook D).
