@@ -161,4 +161,5 @@ rules:
   - RULE-SET,cn-domain,DIRECT
   - GEOSITE,cn,DIRECT                 # built-in copy of the same data: safety net when rule sets are missing
   - RULE-SET,cn-ip,DIRECT,no-resolve  # only for connections that arrive as a CN IP; never resolves a domain
+  - GEOIP,CN,DIRECT,no-resolve        # built-in copy of the same: safety net for hard-coded CN IPs (WeChat)
   - MATCH,PROXY

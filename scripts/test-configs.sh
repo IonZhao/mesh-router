@@ -217,7 +217,7 @@ client_runtime() {
   rule_hit client_override_list_wins mirrors.tuna.tsinghua.edu.cn 'RuleSet.direct-extra'
   rule_hit client_cn_stays_direct_without_rule_sets www.baidu.com 'GeoSite.cn'
   rule_hit client_foreign_goes_to_proxy www.example.com 'Match'
-  rule_hit client_cn_ip_stays_direct_without_rule_sets '223\.5\.5\.5' 'GeoIP.CN'
+  rule_hit client_cn_ip_stays_direct_without_rule_sets '223\.5\.5\.5' 'GeoIP.[Cc][Nn]'   # mihomo logs "GeoIP(cn)"
 }
 client_runtime
 
