@@ -42,6 +42,41 @@ expect() {
   fi
 }
 
+# --- repository hygiene ---------------------------------------------------------------------------
+# The repo is public: the deployment's own host, domains and the author's home paths must never be
+# committed — neither in tracked files nor anywhere in this branch's history. Values are read from
+# the local secrets file (when present) and never printed.
+hygiene() {
+  local envf="$REPO_ROOT/secrets/vps.env" vals=() v hits base="" found=0
+  if [[ -f "$envf" ]]; then
+    for v in VPS_HOST STATIC_DOMAIN CDN_DOMAIN; do
+      val="$(grep -E "^$v=" "$envf" | head -1 | cut -d= -f2 | awk '{print $1}')"
+      case "$val" in ""|*example*|203.0.113.*|cdn.invalid) ;; *) vals+=("$val") ;; esac
+    done
+    # the registrable domain behind STATIC_DOMAIN (static.<domain>) catches every subdomain
+    val="$(grep -E '^STATIC_DOMAIN=' "$envf" | head -1 | cut -d= -f2 | awk '{print $1}')"
+    [[ "$val" == *.*.* && "$val" != *example* ]] && vals+=("${val#*.}")
+  fi
+  # home-folder paths, split in two so this file does not match itself
+  vals+=("C:\\""Users\\" "C:/""Users/" "/c/""Users/")
+  base="$(git -C "$REPO_ROOT" merge-base HEAD origin/main 2>/dev/null || true)"
+  for v in "${vals[@]}"; do
+    hits="$(git -C "$REPO_ROOT" grep -l -I -F -e "$v" -- . 2>/dev/null | tr '\n' ' ')"
+    if [[ -n "$hits" ]]; then ko "no_deployment_identifiers_tracked (a private value appears in: $hits)"; found=1; fi
+    # no `grep -q`: it exits on the first match, git log dies of SIGPIPE and pipefail hides the hit
+    if [[ -n "$base" ]] && git -C "$REPO_ROOT" log -p "$base..HEAD" | grep -F -e "$v" >/dev/null; then
+      ko "no_deployment_identifiers_in_branch_history (a private value appears in a commit since $(echo "$base" | cut -c1-7))"
+      found=1
+    fi
+  done
+  [[ $found -eq 0 ]] && ok no_deployment_identifiers_tracked_or_in_history
+
+  # Every committed script except the sourced lib.sh must be executable (README runs them on Linux).
+  hits="$(git -C "$REPO_ROOT" ls-files -s -- '*.sh' | awk '$1 != "100755" && $4 != "scripts/lib.sh" {print $4}' | tr '\n' ' ')"
+  if [[ -z "$hits" ]]; then ok scripts_are_executable_in_git; else ko "scripts_are_executable_in_git (not 100755: $hits)"; fi
+}
+hygiene
+
 # --- the real templates pass every available check -------------------------------------------
 expect 0 templates_validate "" bash "$V"
 
@@ -104,6 +139,11 @@ expect 1 reality_target_oversized_record_fails "record 8273 bytes" \
 # The whole server flight above 8192 bytes can overflow REALITY's buffer between reads.
 expect 1 reality_target_oversized_flight_fails "flight 8464 bytes" \
   env CHECK_REALITY_INPUT="$TD/reality-target-big-flight.msg" bash "$R" example.test
+# OpenSSL 3.5+ reports the TLS 1.3 key exchange as "Negotiated TLS1.3 group:" instead of
+# "Server Temp Key:"; the checker must not FAIL every target on such a VPS.
+sed 's/^Server Temp Key: X25519, 253 bits$/Negotiated TLS1.3 group: X25519/' "$TD/reality-target-ok.msg" >"$TMP/openssl35.msg"
+expect 0 reality_target_newer_openssl_wording_passes "PASS" \
+  env CHECK_REALITY_INPUT="$TMP/openssl35.msg" bash "$R" example.test
 # REALITY targets must negotiate h2.
 expect 1 reality_target_without_h2_fails "no h2" \
   env CHECK_REALITY_INPUT="$TD/reality-target-no-h2.msg" bash "$R" example.test
@@ -162,7 +202,8 @@ client_runtime() {
     grep -q 'www\.baidu\.com' "$work/mihomo.log" && break
     sleep 0.5
   done
-  for host in mirrors.tuna.tsinghua.edu.cn www.example.com; do
+  # 223.5.5.5 = AliDNS, a CN IP reached without any hostname (like WeChat's hard-coded IPs).
+  for host in mirrors.tuna.tsinghua.edu.cn www.example.com 223.5.5.5; do
     curl -s -o /dev/null --max-time 8 -x "http://127.0.0.1:$port" "http://$host/" || true
   done
   sleep 1
@@ -176,6 +217,7 @@ client_runtime() {
   rule_hit client_override_list_wins mirrors.tuna.tsinghua.edu.cn 'RuleSet.direct-extra'
   rule_hit client_cn_stays_direct_without_rule_sets www.baidu.com 'GeoSite.cn'
   rule_hit client_foreign_goes_to_proxy www.example.com 'Match'
+  rule_hit client_cn_ip_stays_direct_without_rule_sets '223\.5\.5\.5' 'GeoIP.CN'
 }
 client_runtime
 
@@ -205,6 +247,12 @@ render_preseed() {
   expect 0 render_survives_unreachable_rule_sets "WARN: could not download" \
     env MESH_SECRETS_FILES="$TMP/preseed.env" MESH_CLIENT_TPL="$work/down.template" \
         MESH_CLIENT_OUT="$work/down.yaml" MESH_RULES_DIR="$work/down" bash "$REPO_ROOT/client/render-client-config.sh"
+  # A secrets file under a path with a space (a home folder named "First Last") still loads.
+  mkdir -p "$work/dir with space"
+  cp "$TMP/preseed.env" "$work/dir with space/vps.env"
+  expect 0 render_loads_secrets_from_path_with_space "Wrote " \
+    env MESH_SECRETS_FILES="$work/dir with space/vps.env" MESH_SKIP_RULE_DOWNLOAD=1 \
+        MESH_CLIENT_OUT="$work/space.yaml" bash "$REPO_ROOT/client/render-client-config.sh"
 }
 render_preseed
 
