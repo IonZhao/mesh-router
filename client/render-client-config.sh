@@ -6,17 +6,22 @@
 #
 # Needs from secrets: VPS_HOST, VLESS_UUID, REALITY_HANDSHAKE, REALITY_PUBLIC_KEY,
 #                     REALITY_SHORT_ID, STATIC_DOMAIN, HY2_PASSWORD
+#
+# Overrides used by scripts/validate-configs.sh (render with throwaway values, never real secrets):
+#   MESH_SECRETS_FILES  space-separated env files to load instead of the two secrets files
+#   MESH_CLIENT_TPL     template to render            MESH_CLIENT_OUT  where to write the result
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-TPL="$SCRIPT_DIR/clash-meta.yaml.template"
-OUT="$SCRIPT_DIR/clash-meta.yaml"
+TPL="${MESH_CLIENT_TPL:-$SCRIPT_DIR/clash-meta.yaml.template}"
+OUT="${MESH_CLIENT_OUT:-$SCRIPT_DIR/clash-meta.yaml}"
+SECRETS_FILES="${MESH_SECRETS_FILES:-$REPO_ROOT/secrets/vps.env $REPO_ROOT/secrets/mac.env}"
 
 die() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 
 # Load secrets (vps.env has most; mac.env carries REALITY_PUBLIC_KEY for reference).
-for f in "$REPO_ROOT/secrets/vps.env" "$REPO_ROOT/secrets/mac.env"; do
+for f in $SECRETS_FILES; do
   [[ -f "$f" ]] && { set -a; source "$f"; set +a; }
 done
 
