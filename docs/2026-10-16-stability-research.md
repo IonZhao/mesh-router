@@ -64,7 +64,7 @@ MetaCubeX/meta-rules-dat `meta` branch (`geo/geosite/cn.mrs`, `geo/geoip/cn.mrs`
 
 ## Implementation record (branch `stability-fixes`, 2026-10-16)
 
-Executed inline against `docs/superpowers/plans/2026-10-16-stability-fixes.md`; Tasks 1–4 and 8 done, Tasks 5–7 gated on the 24 h observation. Offline suite `scripts/test-configs.sh`: 29 passed. A fresh whole-branch review returned "with fixes"; all Critical/Important findings were fixed test-first, including scrubbing deployment identifiers from this file's first version (the branch history was rewritten before any push).
+Executed inline against `docs/superpowers/plans/2026-10-16-stability-fixes.md`; Tasks 1–4 and 8 done, Tasks 5–7 gated on the 24 h observation. Offline suite `scripts/test-configs.sh`: 30 passed at the end of that branch (61 after the improvements branch below). A fresh whole-branch review returned "with fixes"; all Critical/Important findings were fixed test-first, including scrubbing deployment identifiers from this file's first version (the branch history was rewritten before any push).
 
 Additional evidence gathered while implementing:
 
@@ -87,3 +87,18 @@ Decisions that deviate from the plan (each: what — why — cost if wrong):
 Deferred minor findings: no test asserts which node the group picks when every node is dead; `client/probe-node.sh` should be run with the client's TUN off and its fixed 120 s timeout cuts very long runs; the template comment credits jsDelivr for the ads list (it is adrules.top); the suite header says "no network" although the client runtime cases dial baidu/tuna (they pass offline via dial-error lines); the checker does not verify the ChangeCipherSpec record. Pre-existing and out of scope: README says "2 inbounds" (there are 3); `cache_file.path` is not under the compose volume, so the `trusted-exit` selection resets on restart; Docker log rotation.
 
 Pending user steps: deploy the branch on the VPS (`./bootstrap.sh`), confirm `network is unreachable` → 0; run `scripts/check-reality-target.sh dl.google.com www.apple.com www.microsoft.com` on the VPS and set `REALITY_HANDSHAKE` to a PASS target on both sides; `client/probe-node.sh reality-vps 5` → 5/5; import the new client profile (README "Client host checklist"); observe 24 h (Task 5); peak-hour line test (README Runbook D).
+
+## Improvements branch (`improvements`, on top of `stability-fixes`, 2026-10-16)
+
+Scope by the owner's decision: everything that neither changes the VPS's running behaviour nor needs a decision, plus automated health checks with default thresholds. VPS behaviour changes (Docker log rotation, `cache_file` path, bootstrap reading the pinned version, the firewall-reset trap) wait until PR #1 is verified on the VPS; the second exit, self-steal, hardening and hy2 obfuscation still need decisions.
+
+What landed:
+
+- Tooling: platform-exact sing-box discovery under `.tools/`, strict Docker fallback, clear prerequisite messages, `envsubst`/`timeout` listed, WARN on a sing-box version other than the pinned one, mihomo found through the running Clash Verge or default install folders (round-3 review items 1–7).
+- Client tooling: `probe-node.sh` refuses to run while the client's TUN is on, scales its budget with the try count and hides server addresses; the render script refreshes rule-set files older than a day; the template gained an inline `proxy-extra` set before the ad list; the hygiene check also scans UUIDs, passwords, keys and tokens.
+- Health checks (report §9 item 1): `scripts/singbox-log-alert.sh` (VPS cron → Uptime Kuma push) and `client/health-check.sh` + `client/install-health-task.sh` (5-minute scheduled task, CSV, one-shot Windows notifications, optional Kuma push). Defaults: node dead ≥ 10 min, group off hy2-vps ≥ 10 min, rule set older than 3 days, controller unreachable; `ALERT_INVALID_MAX` unset (scanner noise alone never alerts).
+- CI: `.github/workflows/test.yml` runs the suite on Linux with pinned mihomo and sing-box (first Linux run of the tooling).
+
+Decisions: the client check reads Clash Verge's controller address and secret from Verge's own runtime config and never stores them; it requires Verge's "External controller" switch to be on (one toggle). Counts in the VPS probe are log lines, not occurrences. jq on the owner's machine prints CRLF, so every `jq -r` read in the client check strips `\r`.
+
+Pending user steps: turn on Verge's external controller, run `client/health-check.sh` once, then `client/install-health-task.sh`; create an Uptime Kuma push monitor, put its URL in `secrets/vps.env` as `KUMA_PUSH_URL_SINGBOX`, add the cron line from README "Automated health checks" on the VPS.
