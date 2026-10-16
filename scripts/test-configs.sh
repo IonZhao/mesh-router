@@ -23,11 +23,13 @@ fail=0
 # shellcheck source=lib.sh
 source "$SCRIPT_DIR/lib.sh"
 missing=""
-if [[ -z "$(find_singbox)" ]] && ! { command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; }; then
-  missing+=" sing-box $(pinned_singbox_version) (unpack it under .tools/, set SINGBOX_BIN, or start Docker);"
+if [[ -n "${SINGBOX_USE_DOCKER:-}" ]]; then
+  docker_up || missing+=" Docker (SINGBOX_USE_DOCKER=1 is set but docker is not running);"
+elif [[ -z "$(find_singbox)" ]] && ! docker_up; then
+  missing+=" sing-box $(pinned_singbox_version) (unpack .tools/sing-box-<version>-$(host_platform)/, set SINGBOX_BIN, or start Docker);"
 fi
-[[ -z "$(find_mihomo)" ]] && missing+=" mihomo (set MIHOMO_BIN or put it on PATH);"
-for t in jq openssl curl awk; do command -v "$t" >/dev/null 2>&1 || missing+=" $t;"; done
+[[ -z "$(find_mihomo)" ]] && missing+=" mihomo (set MIHOMO_BIN or MESH_CLASH_VERGE_DIR, or put mihomo on PATH);"
+for t in jq openssl curl awk envsubst timeout; do command -v "$t" >/dev/null 2>&1 || missing+=" $t;"; done
 if [[ -n "$missing" ]]; then
   echo "FAIL prerequisites missing:$missing see README \"Validating locally\""
   exit 1
@@ -115,6 +117,7 @@ cat >"$stub/docker" <<'STUB'
 [[ "$1" == "info" ]] && exit 0
 [[ "$1" == "run" ]] || exit 2
 shift
+mounts=0; image=""; rest=()
 while [[ $# -gt 0 ]]; do
   if [[ "$1" == "-v" ]]; then
     if [[ "$2" =~ ^([A-Za-z]:/[^:]*):(/.*)$ ]]; then src="${BASH_REMATCH[1]}"
@@ -124,16 +127,76 @@ while [[ $# -gt 0 ]]; do
       echo "stub-docker: Docker Desktop cannot see $src"; exit 1
     fi
     [[ -e "$src" ]] || { echo "stub-docker: missing $src"; exit 1; }
-    shift 2
-  else
+    mounts=$((mounts + 1)); shift 2
+  elif [[ "$1" == --* ]]; then
     shift
+  elif [[ -z "$image" ]]; then
+    image="$1"; shift
+  else
+    rest+=("$1"); shift
   fi
 done
+[[ "$image" =~ ^ghcr.io/sagernet/sing-box:.+$ ]] || { echo "stub-docker: empty image tag in '$image'"; exit 1; }
+[[ "$mounts" -eq 3 ]] || { echo "stub-docker: expected 3 mounts, got $mounts"; exit 1; }
+[[ "${rest[*]}" == "check -c /c.json" ]] || { echo "stub-docker: expected 'check -c /c.json', got '${rest[*]}'"; exit 1; }
 echo "stub-docker: ok"
 STUB
 chmod +x "$stub/docker"
 expect 0 vps_docker_fallback_uses_daemon_visible_paths "sing-box check passed \(docker" \
   env SINGBOX_USE_DOCKER=1 PATH="$stub:$PATH" bash "$V" --vps
+# The stand-in itself must be strict, or the case above could pass for the wrong reason.
+NT="$(native "$TMP")"
+expect 1 stub_docker_rejects_empty_image_tag "empty image tag" \
+  "$stub/docker" run --rm -v "$NT:/a:ro" -v "$NT:/b:ro" -v "$NT:/c:ro" "ghcr.io/sagernet/sing-box:" check -c /c.json
+expect 1 stub_docker_requires_three_mounts_and_check "expected 3 mounts" \
+  "$stub/docker" run --rm -v "$NT:/a:ro" "ghcr.io/sagernet/sing-box:v1.11.14" check -c /c.json
+
+# SINGBOX_USE_DOCKER=1 with Docker down is a hard failure that names Docker, never a WARN + exit 0.
+stubdown="$TMP/stub-down"
+mkdir -p "$stubdown"
+printf '#!/usr/bin/env bash\nexit 1\n' >"$stubdown/docker"
+chmod +x "$stubdown/docker"
+expect 1 vps_use_docker_without_daemon_fails "Docker is not running" \
+  env SINGBOX_USE_DOCKER=1 PATH="$stubdown:$PATH" bash "$V" --vps
+
+# No SINGBOX_VERSION pin → hard failure, not an empty image tag.
+expect 1 vps_missing_version_pin_fails "SINGBOX_VERSION" \
+  env MESH_ENV_FILE="$TMP/no-such.env" bash "$V" --vps
+
+# A sing-box of another version still checks, but warns that it is not what the VPS runs.
+stubsb="$TMP/stub-sb"
+mkdir -p "$stubsb"
+printf '#!/usr/bin/env bash\n[[ "$1" == version ]] && { echo "sing-box version 9.9.9"; exit 0; }\nexit 0\n' >"$stubsb/sing-box"
+chmod +x "$stubsb/sing-box"
+expect 0 vps_singbox_version_mismatch_warns "WARN vps: sing-box 9.9.9 found but .env pins" \
+  env SINGBOX_BIN="$stubsb/sing-box" bash "$V" --vps
+
+# Binary discovery: the pinned version for THIS host platform, never a pre-release or another arch.
+discovery() {
+  local plat other tools pin exe=""
+  plat="$(host_platform)"
+  case "$plat" in *-amd64) other="${plat%-amd64}-arm64" ;; *) other="${plat%-*}-amd64" ;; esac
+  [[ "$plat" == windows-* ]] && exe=".exe"
+  pin="$(pinned_singbox_version)"; pin="${pin#v}"
+  tools="$TMP/tools"
+  for d in "sing-box-$pin-beta.1-$plat" "sing-box-$pin-$plat" "sing-box-$pin-$other"; do
+    mkdir -p "$tools/$d"
+    printf '#!/usr/bin/env bash\necho "sing-box version %s"\n' "$pin" >"$tools/$d/sing-box$exe"
+    chmod +x "$tools/$d/sing-box$exe"
+  done
+  local got
+  got="$(SINGBOX_BIN= MESH_TOOLS_DIR="$tools" find_singbox)"
+  if [[ "$got" == "$tools/sing-box-$pin-$plat/sing-box$exe" ]]; then ok find_singbox_picks_exact_version_for_host
+  else ko "find_singbox_picks_exact_version_for_host (got '$got')"; fi
+
+  mkdir -p "$TMP/pf/Clash Verge"
+  printf '#!/usr/bin/env bash\n' >"$TMP/pf/Clash Verge/verge-mihomo.exe"
+  chmod +x "$TMP/pf/Clash Verge/verge-mihomo.exe"
+  got="$(MIHOMO_BIN= MESH_CLASH_VERGE_DIR= MESH_MIHOMO_NO_PROCESS=1 PROGRAMFILES="$TMP/pf" LOCALAPPDATA="$TMP/none" PATH=/nonexistent find_mihomo)"
+  if [[ "$got" == "$TMP/pf/Clash Verge/verge-mihomo.exe" ]]; then ok find_mihomo_falls_back_to_program_files
+  else ko "find_mihomo_falls_back_to_program_files (got '$got')"; fi
+}
+discovery
 
 # mihomo rejects a rule that points at a rule-provider that does not exist.
 awk '{print} /^rules:/{print "  - RULE-SET,no-such-provider,DIRECT"}' "$CLIENT_TPL" >"$TMP/bad-rule.yaml.template"

@@ -107,21 +107,26 @@ Docker), and `docker compose run --rm sing-box check -c /etc/sing-box/config.jso
 
 `scripts/test-configs.sh` (run it before every deploy) needs:
 
-- **mihomo** — Clash Verge Rev's bundled `verge-mihomo.exe` is found automatically on Windows;
-  elsewhere put `mihomo` on PATH or set `MIHOMO_BIN`.
+- **mihomo** — on Windows the scripts use Clash Verge Rev's bundled `verge-mihomo.exe`, found
+  through the running `clash-verge.exe` or the default install folders; set `MESH_CLASH_VERGE_DIR`
+  if yours lives elsewhere. On other systems put `mihomo` on PATH or set `MIHOMO_BIN`.
 - **sing-box at the version pinned in `.env`**, so the VPS config is checked by the same core the
-  VPS runs: either Docker is running, or unpack the release once under `.tools/` (gitignored),
-  where the scripts find it by itself:
+  VPS runs: either Docker is running (`SINGBOX_USE_DOCKER=1` forces it), or unpack the release
+  once under `.tools/` (gitignored), where the scripts find it by itself. `<platform>` is
+  `windows-amd64`, `linux-amd64`, `darwin-arm64`, …:
 
   ```bash
-  ver=$(grep '^SINGBOX_VERSION=' .env | cut -d= -f2); v=${ver#v}
-  gh release download "$ver" -R SagerNet/sing-box -p "sing-box-$v-windows-amd64.zip" -D .tools
-  unzip -q -o ".tools/sing-box-$v-windows-amd64.zip" -d .tools
+  ver=$(grep '^SINGBOX_VERSION=' .env | cut -d= -f2); v=${ver#v}; p=windows-amd64
+  curl -fsSL -o ".tools/sing-box-$v-$p.zip" --create-dirs \
+    "https://github.com/SagerNet/sing-box/releases/download/$ver/sing-box-$v-$p.zip"
+  unzip -q -o ".tools/sing-box-$v-$p.zip" -d .tools        # Linux/macOS: .tar.gz + tar -xzf … -C .tools
   ```
 
-  On Linux use `linux-amd64.tar.gz`, on Apple silicon `darwin-arm64.tar.gz` (`tar -xzf … -C .tools`).
-  Or point `SINGBOX_BIN` at any sing-box binary of that version.
-- **jq, openssl, curl.** The suite stops with "prerequisites missing" if any of these is absent.
+  (`gh release download "$ver" -R SagerNet/sing-box -p "sing-box-$v-$p.zip" -D .tools` does the
+  same with the GitHub CLI.) A sing-box of another version, via `SINGBOX_BIN` or PATH, still runs
+  the check but prints a WARN: its verdict may differ from the VPS's.
+- **jq, openssl, curl, envsubst (`gettext`), timeout (`coreutils`).** The suite stops with
+  "prerequisites missing" if any of these is absent.
 
 ### Client host checklist (Clash Verge Rev on Windows)
 
