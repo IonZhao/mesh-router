@@ -1,0 +1,8 @@
++0000 2026-10-16 02:10:07 INFO [2068867362 0ms] inbound/vless[vless-reality-in]: inbound connection from 198.51.100.23:53316
++0000 2026-10-16 02:10:27 ERROR [2068867362 19.7s] inbound/vless[vless-reality-in]: process connection from 198.51.100.23:53316: TLS handshake: REALITY: processed invalid connection
++0000 2026-10-16 02:11:08 ERROR [1696195603 22.4s] inbound/vless[vless-reality-in]: process connection from 198.51.100.77:21651: TLS handshake: REALITY: processed invalid connection
++0000 2026-10-16 02:12:18 INFO [639558419 0ms] inbound/hysteria2[hy2-in]: inbound connection from 192.0.2.10:41000
++0000 2026-10-16 02:12:18 INFO [639558419 0ms] inbound/hysteria2[hy2-in]: inbound connection to www.example.com:443
++0000 2026-10-16 02:13:29 ERROR [4161292620 15ms] connection: report handshake success: stream 36960 canceled by remote with error code 0
++0000 2026-10-16 02:14:40 ERROR [3101113552 20.1s] inbound/vless[vless-reality-in]: process connection from 198.51.100.77:21655: TLS handshake: REALITY: processed invalid connection
++0000 2026-10-16 02:15:51 ERROR [3101113553 20.3s] inbound/vless[vless-reality-in]: process connection from 198.51.100.77:21656: TLS handshake: REALITY: processed invalid connection

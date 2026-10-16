@@ -229,6 +229,26 @@ on the public IP.
 After first boot, add an Uptime Kuma monitor: **TCP Port**, host = Mac mini Tailscale IP, port `18443`,
 interval 60s, plus a notification. Optionally cron `scripts/check-tailscale-direct.sh` for DERP alerts.
 
+### Automated health checks
+
+Dashboards only help when you look at them; a path that is half-broken stays unnoticed for weeks
+(this happened to Reality). Two scheduled checks raise alerts instead:
+
+**VPS: `scripts/singbox-log-alert.sh`** counts, every 10 minutes, the sing-box log lines that mean
+traffic is failing — `network is unreachable` (dialed an address family the host has no route for),
+`failed to dial dest` (Reality handshake target unreachable, every Reality client sees EOF) and
+`processed invalid connection` (Reality rejected a handshake; a steady trickle is scanner noise, a
+jump means your own clients are rejected) — and pushes `up`/`down` with the counts to an Uptime Kuma
+**Push** monitor. Setup: create the push monitor in Kuma (interval 600 s), put its URL in
+`secrets/vps.env` as `KUMA_PUSH_URL_SINGBOX=…`, then on the VPS:
+
+```bash
+( crontab -l 2>/dev/null; echo '*/10 * * * * /root/mesh-router/scripts/singbox-log-alert.sh >/dev/null 2>&1' ) | crontab -
+```
+
+Thresholds: `ALERT_UNREACHABLE_MAX` (0), `ALERT_DIAL_DEST_MAX` (0), `ALERT_INVALID_MAX` (unset =
+never alert on invalid handshakes alone). Run it by hand to see the counts.
+
 **Netdata access note.** The new Netdata UI nudges you to sign in to Netdata Cloud — you don't need it;
 the agent collects everything locally regardless. Use the **local, no-account** path: when prompted, run
 `docker exec netdata cat /var/lib/netdata/netdata_random_session_id` and paste the token. Don't sign in
