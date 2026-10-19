@@ -15,11 +15,16 @@ find_mihomo() {
   command -v mihomo 2>/dev/null || true
 }
 
-# The sing-box version the VPS runs (SINGBOX_VERSION in the repo-root .env), e.g. v1.11.14.
+# The sing-box version the VPS runs (SINGBOX_VERSION in the repo-root .env), e.g. v1.14.3.
+# The one parser of that line: quotes, a trailing "# comment" and CR are tolerated, the way
+# docker compose reads the same file. Fails (prints nothing) when the line is missing or empty.
 pinned_singbox_version() {
-  local root
+  local root v
   root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-  grep -E '^SINGBOX_VERSION=' "$root/.env" | cut -d= -f2 | tr -d '\r'
+  v="$(grep -E '^SINGBOX_VERSION=' "$root/.env" 2>/dev/null | head -1 | cut -d= -f2- \
+       | sed -E 's/[[:space:]]+#.*$//; s/^[[:space:]]*//; s/[[:space:]]*$//' | tr -d "\r\"'")"
+  [[ -n "$v" ]] || return 1
+  printf '%s\n' "$v"
 }
 
 # Print the path of a sing-box binary for local checks, or nothing when none is found.

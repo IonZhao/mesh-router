@@ -41,6 +41,14 @@ for v in "${REQUIRED[@]}"; do
 done
 case "$MAC_TAILSCALE_IP" in 100.x.*) die "MAC_TAILSCALE_IP is still a placeholder. Set up the Mac mini first and copy its 'tailscale ip -4' value." ;; esac
 
+# 3b. Image pins live in the repo-root .env (compose reads the same file). The config is
+#     validated with exactly the pinned sing-box, never with a version of this script's own.
+#     scripts/lib.sh owns the parser so every script reads the pin the same way.
+# shellcheck source=../scripts/lib.sh
+source "$REPO_ROOT/scripts/lib.sh"
+SINGBOX_VERSION="${SINGBOX_VERSION:-$(pinned_singbox_version || true)}"
+[[ -n "$SINGBOX_VERSION" ]] || die "SINGBOX_VERSION is not set in $REPO_ROOT/.env"
+
 # 4. Render config.json from the template (only our known vars are substituted).
 command -v envsubst >/dev/null 2>&1 || die "envsubst not found. Install: apt-get install -y gettext-base"
 # Log verbosity is a deploy-time choice, never committed: `SINGBOX_LOG_LEVEL=debug ./bootstrap.sh`
@@ -69,7 +77,7 @@ fi
 log "Validating sing-box config..."
 docker run --rm -v "$SCRIPT_DIR/sing-box/config.json:/c.json:ro" -v "$SCRIPT_DIR/rulesets:/etc/sing-box/rulesets:ro" \
   -v "$SCRIPT_DIR/acme:/etc/sing-box/acme:ro" \
-  "ghcr.io/sagernet/sing-box:${SINGBOX_VERSION:-v1.11.14}" check -c /c.json \
+  "ghcr.io/sagernet/sing-box:${SINGBOX_VERSION}" check -c /c.json \
   || die "sing-box config validation failed (see output above)."
 
 # 7. Up.

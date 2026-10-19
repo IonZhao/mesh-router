@@ -39,7 +39,8 @@ done
 [[ $DO_VPS -eq 0 && $DO_CLIENT -eq 0 ]] && { DO_VPS=1; DO_CLIENT=1; }
 
 TMP="$(mktemp -d)"
-trap 'rm -rf "$TMP"' EXIT
+START_PID=""   # the sing-box started by the VPS start test, killed on exit even on Ctrl-C
+trap '[[ -n "$START_PID" ]] && kill "$START_PID" 2>/dev/null; rm -rf "$TMP"' EXIT
 failed=0
 ok()   { echo "OK   $*"; }
 bad()  { echo "FAIL $*"; failed=1; }
@@ -87,15 +88,61 @@ check_vps() {
 
   sb="$(find_singbox)"
 
+  # `check` only decodes the config; services are wired at START (a DNS server whose detour is a
+  # plain direct outbound passes check and dies at start, 2026-10-19). So after check, the config
+  # is also started for a moment on loopback high ports: every listener is moved to 127.0.0.1 and
+  # its port + 10000, the Clash API to 127.0.0.1:19090, then we wait for "sing-box started".
+  # The copy that is started never leaves the machine: listeners on 127.0.0.1 at port + offset
+  # (MESH_START_PORT_OFFSET, default 10000), the Clash API on 127.0.0.1:19090 without the
+  # external-UI download (a GitHub fetch that would otherwise gate "sing-box started"), and the
+  # ACME provider pointed at a closed local port so no throwaway Let's Encrypt account or order is
+  # ever created for the test values (the provider wiring is still exercised; it fails in the
+  # background, which is not fatal).
+  start_config() { # start_config <rendered config> -> <loopback copy>
+    jq --argjson off "${MESH_START_PORT_OFFSET:-10000}" '
+      .inbounds |= map(.listen = "127.0.0.1" | if .listen_port != null then .listen_port += $off else . end)
+      | (if .experimental.clash_api then
+           .experimental.clash_api |= (.external_controller = "127.0.0.1:19090"
+             | del(.external_ui, .external_ui_download_url, .external_ui_download_detour))
+         else . end)
+      | (if .certificate_providers then
+           .certificate_providers |= map(if .type == "acme" then .provider = "https://127.0.0.1:9/directory" else . end)
+         else . end)' "$1"
+  }
+  started_ok() { # started_ok <log> <how>
+    [[ -n "${MESH_VALIDATE_LOG_DIR:-}" ]] && { mkdir -p "$MESH_VALIDATE_LOG_DIR"; cp "$1" "$MESH_VALIDATE_LOG_DIR/start.log"; }
+    if grep -q 'sing-box started' "$1"; then
+      ok "vps: sing-box starts with the rendered config ($2)"
+    else
+      bad "vps: sing-box did not start ($2): $(grep -E 'FATAL|ERROR' "$1" | tail -2 | tr '\n' ' ')"
+    fi
+  }
+
   if [[ -n "$sb" && -z "${SINGBOX_USE_DOCKER:-}" ]]; then
     sed "s#/etc/sing-box/#$(native "$work/root")/#g" "$work/config.json" >"$work/config.local.json"
     if "$sb" check -c "$(native "$work/config.local.json")" >"$work/check.log" 2>&1; then
       ok "vps: sing-box check passed ($("$sb" version 2>/dev/null | head -1))"
+      if command -v jq >/dev/null 2>&1; then
+        local i
+        start_config "$work/config.local.json" >"$work/config.start.json"
+        # run from $work so anything the config creates relative to cwd lands there, not in the repo
+        ( cd "$work" && exec "$sb" run -c "$(native "$work/config.start.json")" ) >"$work/start.log" 2>&1 &
+        START_PID=$!
+        for i in $(seq 1 40); do
+          grep -q 'sing-box started' "$work/start.log" 2>/dev/null && break
+          kill -0 "$START_PID" 2>/dev/null || break
+          sleep 0.5
+        done
+        kill "$START_PID" 2>/dev/null; wait "$START_PID" 2>/dev/null; START_PID=""
+        started_ok "$work/start.log" "binary, loopback ports"
+      else
+        warn "vps: jq missing; the start test is skipped"
+      fi
     else
       bad "vps: sing-box check: $(tail -3 "$work/check.log" | tr '\n' ' ')"
     fi
   elif command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
-    local ver
+    local ver name i
     ver="$(pinned_singbox_version)"
     # Mount sources in native form: Docker Desktop cannot see Git Bash's /tmp.
     if MSYS_NO_PATHCONV=1 docker run --rm \
@@ -104,6 +151,29 @@ check_vps() {
          -v "$(native "$work/root/acme"):/etc/sing-box/acme:ro" \
          "ghcr.io/sagernet/sing-box:${ver}" check -c /c.json >"$work/check.log" 2>&1; then
       ok "vps: sing-box check passed (docker ${ver})"
+      if command -v jq >/dev/null 2>&1; then
+        start_config "$work/config.json" >"$work/config.start.json"
+        name="mesh-start-$$"
+        docker rm -f "$name" >/dev/null 2>&1   # a leftover of the same name would make `run` fail and `logs` lie
+        if MSYS_NO_PATHCONV=1 docker run -d --name "$name" \
+             -v "$(native "$work/config.start.json"):/c.json:ro" \
+             -v "$(native "$work/root/rulesets"):/etc/sing-box/rulesets:ro" \
+             -v "$(native "$work/root/acme"):/etc/sing-box/acme:ro" \
+             "ghcr.io/sagernet/sing-box:${ver}" run -c /c.json >"$work/start.err" 2>&1; then
+          for i in $(seq 1 40); do
+            docker logs "$name" 2>&1 | grep -q 'sing-box started' && break
+            [[ "$(docker inspect -f '{{.State.Running}}' "$name" 2>/dev/null)" == true ]] || break
+            sleep 0.5
+          done
+          docker logs "$name" >"$work/start.log" 2>&1
+          docker rm -f "$name" >/dev/null 2>&1
+          started_ok "$work/start.log" "docker ${ver}, loopback ports"
+        else
+          bad "vps: could not start the container for the start test: $(tail -1 "$work/start.err")"
+        fi
+      else
+        warn "vps: jq missing; the start test is skipped"
+      fi
     else
       bad "vps: sing-box check: $(tail -3 "$work/check.log" | tr '\n' ' ')"
     fi

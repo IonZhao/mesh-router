@@ -6,22 +6,31 @@
   "dns": {
     "servers": [
       {
+        "type": "https",
         "tag": "doh-remote",
-        "address": "https://1.1.1.1/dns-query",
-        "detour": "direct"
+        "server": "1.1.1.1"
       }
     ],
     "final": "doh-remote",
     "strategy": "ipv4_only"
   },
+  "certificate_providers": [
+    {
+      "type": "acme",
+      "tag": "hy2-cert",
+      "domain": ["${STATIC_DOMAIN}"],
+      "email": "${ACME_EMAIL}",
+      "provider": "letsencrypt",
+      "data_directory": "/etc/sing-box/acme",
+      "disable_tls_alpn_challenge": true
+    }
+  ],
   "inbounds": [
     {
       "type": "vless",
       "tag": "vless-reality-in",
       "listen": "::",
       "listen_port": 443,
-      "sniff": true,
-      "sniff_override_destination": false,
       "users": [
         {
           "uuid": "${VLESS_UUID}",
@@ -35,8 +44,7 @@
           "enabled": true,
           "handshake": {
             "server": "${REALITY_HANDSHAKE}",
-            "server_port": 443,
-            "domain_strategy": "ipv4_only"
+            "server_port": 443
           },
           "private_key": "${REALITY_PRIVATE_KEY}",
           "short_id": ["${REALITY_SHORT_ID}"]
@@ -48,8 +56,6 @@
       "tag": "hy2-in",
       "listen": "::",
       "listen_port": 8443,
-      "sniff": true,
-      "sniff_override_destination": false,
       "users": [
         {
           "password": "${HY2_PASSWORD}"
@@ -59,13 +65,7 @@
         "enabled": true,
         "alpn": ["h3"],
         "server_name": "${STATIC_DOMAIN}",
-        "acme": {
-          "domain": ["${STATIC_DOMAIN}"],
-          "email": "${ACME_EMAIL}",
-          "provider": "letsencrypt",
-          "data_directory": "/etc/sing-box/acme",
-          "disable_tls_alpn_challenge": true
-        }
+        "certificate_provider": "hy2-cert"
       }
     },
     {
@@ -73,8 +73,6 @@
       "tag": "vless-ws-cdn-in",
       "listen": "::",
       "listen_port": 2053,
-      "sniff": true,
-      "sniff_override_destination": false,
       "users": [
         { "uuid": "${VLESS_UUID}" }
       ],
@@ -92,8 +90,7 @@
   "outbounds": [
     {
       "type": "direct",
-      "tag": "direct",
-      "domain_strategy": "ipv4_only"
+      "tag": "direct"
     },
     {
       "type": "vless",
@@ -118,6 +115,10 @@
     }
   ],
   "route": {
+    "default_domain_resolver": {
+      "server": "doh-remote",
+      "strategy": "ipv4_only"
+    },
     "rule_set": [
       {
         "type": "local",
@@ -133,6 +134,9 @@
       }
     ],
     "rules": [
+      {
+        "action": "sniff"
+      },
       {
         "ip_is_private": true,
         "outbound": "direct"
