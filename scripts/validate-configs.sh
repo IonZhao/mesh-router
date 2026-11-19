@@ -54,7 +54,8 @@ write_throwaway_env "$TMP/throwaway.env"
 # ---- VPS ----------------------------------------------------------------------------------------
 check_vps() {
   local work="$TMP/vps" bvars tvars v missing=() sb=""
-  mkdir -p "$work/root/rulesets" "$work/root/acme"
+  # data/ holds cache.db; sing-box does not create the directory, bootstrap.sh and compose do.
+  mkdir -p "$work/root/rulesets" "$work/root/acme" "$work/root/data"
 
   bvars="$(grep -E "^VARS='" "$BOOTSTRAP" | sed -E "s/^VARS='(.*)'$/\1/")"
   [[ -n "$bvars" ]] || { bad "vps: could not read VARS from $BOOTSTRAP"; return; }
@@ -161,6 +162,7 @@ check_vps() {
              -v "$(native "$work/config.start.json"):/c.json:ro" \
              -v "$(native "$work/root/rulesets"):/etc/sing-box/rulesets:ro" \
              -v "$(native "$work/root/acme"):/etc/sing-box/acme:ro" \
+             -v "$(native "$work/root/data"):/etc/sing-box/data" \
              "ghcr.io/sagernet/sing-box:${ver}" run -c /c.json >"$work/start.err" 2>&1; then
           for i in $(seq 1 40); do
             docker logs "$name" 2>&1 | grep -q 'sing-box started' && break

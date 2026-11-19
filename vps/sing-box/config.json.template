@@ -165,7 +165,7 @@
   "experimental": {
     "cache_file": {
       "enabled": true,
-      "path": "/etc/sing-box/cache.db",
+      "path": "/etc/sing-box/data/cache.db",
       "store_fakeip": false
     },
     "clash_api": {

@@ -221,8 +221,9 @@ while [[ $# -gt 0 ]]; do
   fi
 done
 [[ "$image" =~ ^ghcr.io/sagernet/sing-box:.+$ ]] || { echo "stub-docker: empty image tag in '$image'"; exit 1; }
-[[ "$mounts" -eq 3 ]] || { echo "stub-docker: expected 3 mounts, got $mounts"; exit 1; }
-if [[ -n "$detached" ]]; then want="run -c /c.json"; else want="check -c /c.json"; fi
+# check mounts config, rule sets and certs; the start test also mounts the cache directory
+if [[ -n "$detached" ]]; then want="run -c /c.json"; nmounts=4; else want="check -c /c.json"; nmounts=3; fi
+[[ "$mounts" -eq "$nmounts" ]] || { echo "stub-docker: expected $nmounts mounts, got $mounts"; exit 1; }
 [[ "${rest[*]}" == "$want" ]] || { echo "stub-docker: expected '$want', got '${rest[*]}'"; exit 1; }
 if [[ -n "$detached" ]]; then
   [[ -n "${STUB_FAIL_START:-}" ]] && { echo "stub-docker: Error response from daemon: cannot start"; exit 125; }
@@ -321,6 +322,11 @@ jq_true vps_hy2_cert_comes_from_an_acme_provider "$VPS_TPL" \
 # An HTTP/3 request without Hysteria2 auth gets an ordinary web-server answer, not sing-box's bare default.
 jq_true vps_hy2_has_a_masquerade "$VPS_TPL" \
   '[.inbounds[] | select(.tag == "hy2-in") | .masquerade | (.type == "string" and .status_code == 404)] == [true]'
+# The cache file (it holds the trusted-exit selection) sits on the volume compose persists, so a
+# recreated container keeps the selection.
+jq_true vps_cache_file_is_on_the_persisted_volume "$VPS_TPL" \
+  '.experimental.cache_file.path | startswith("/etc/sing-box/data/")'
+if grep -q '\./data/sing-box:/etc/sing-box/data' "$REPO_ROOT/vps/docker-compose.yml"; then ok vps_compose_persists_the_cache_dir; else ko vps_compose_persists_the_cache_dir; fi
 # The sing-box json log is capped; uncapped it grew about 90 MB a day on the VPS.
 if grep -A20 'container_name: sing-box' "$REPO_ROOT/vps/docker-compose.yml" | grep -q 'max-size'; then ok vps_singbox_log_is_capped; else ko vps_singbox_log_is_capped; fi
 # Every DNS server is reachable from `final` or a rule (sing-box never queries an orphan server).
@@ -513,6 +519,17 @@ render_preseed() {
   expect 0 render_loads_secrets_from_path_with_space "Wrote " \
     env MESH_SECRETS_FILES="$work/dir with space/vps.env" MESH_SKIP_RULE_DOWNLOAD=1 \
         MESH_CLIENT_OUT="$work/space.yaml" bash "$REPO_ROOT/client/render-client-config.sh"
+
+  # A placeholder CDN_DOMAIN renders a dead cdn-fallback node: say so, and stay quiet for a real one.
+  sed -E 's/^CDN_DOMAIN=.*/CDN_DOMAIN=cdn.example.com/' "$TMP/preseed.env" >"$work/cdn-placeholder.env"
+  expect 0 render_warns_on_placeholder_cdn_domain "WARN: CDN_DOMAIN is a placeholder" \
+    env MESH_SECRETS_FILES="$work/cdn-placeholder.env" MESH_SKIP_RULE_DOWNLOAD=1 \
+        MESH_CLIENT_OUT="$work/cdn-placeholder.yaml" bash "$REPO_ROOT/client/render-client-config.sh"
+  sed -E 's/^CDN_DOMAIN=.*/CDN_DOMAIN=cdn.realsite.net/' "$TMP/preseed.env" >"$work/cdn-real.env"
+  env MESH_SECRETS_FILES="$work/cdn-real.env" MESH_SKIP_RULE_DOWNLOAD=1 MESH_CLIENT_OUT="$work/cdn-real.yaml" \
+      bash "$REPO_ROOT/client/render-client-config.sh" >"$work/cdn-real.log" 2>&1
+  if grep -q 'CDN_DOMAIN is a placeholder' "$work/cdn-real.log"; then ko render_quiet_on_real_cdn_domain
+  else ok render_quiet_on_real_cdn_domain; fi
 }
 render_preseed
 
