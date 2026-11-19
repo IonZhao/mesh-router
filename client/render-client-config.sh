@@ -36,6 +36,11 @@ done
 # proxy simply tests dead in the fallback group) when Cloudflare hasn't been set up yet.
 CDN_DOMAIN="${CDN_DOMAIN:-cdn.invalid}"
 CDN_WS_PATH="${CDN_WS_PATH:-cdnfallback}"
+# A placeholder renders a cdn-fallback node that can never connect. That is fine before Cloudflare
+# is set up, and a silent loss of the last-resort path after it (this happened on 2026-10-16, when
+# the local secrets file still had the example value while the VPS had the real one).
+CDN_PLACEHOLDER=""
+case "$CDN_DOMAIN" in cdn.invalid|*.invalid|*example.com|*yourdomain*) CDN_PLACEHOLDER=1 ;; esac
 
 sed -e "s|\${VPS_HOST}|$VPS_HOST|g" \
     -e "s|\${VLESS_UUID}|$VLESS_UUID|g" \
@@ -84,6 +89,10 @@ if [[ -z "${MESH_SKIP_RULE_DOWNLOAD:-}" ]]; then
   done
 fi
 
+if [[ -n "$CDN_PLACEHOLDER" ]]; then
+  echo "WARN: CDN_DOMAIN is a placeholder ($CDN_DOMAIN): the cdn-fallback node in this profile is dead."
+  echo "      If the Cloudflare fallback is set up, put the real CDN_DOMAIN in secrets/vps.env and re-render."
+fi
 echo "Import it into Clash Meta / mihomo (Clash Verge, FlClash, mihomo Party, etc.) on your China-side machine,"
 echo "and copy $RULES_DIR/rules/ into that client's config directory (Clash Verge on Windows:"
 echo "%APPDATA%\\io.github.clash-verge-rev.clash-verge-rev\\rules\\). Add always-direct domains to the"

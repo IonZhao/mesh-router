@@ -33,9 +33,12 @@ VPS (any region, sing-box)        trust split: sensitive -> trusted-exit, else -
   (sing-box/Xray's REALITY server drops the connection otherwise and logs
   `processed invalid connection`; the client sees `connect error: EOF`). CDN-fronted sites send
   different certificate chains to different places, so check candidates **from the VPS**:
-  `scripts/check-reality-target.sh dl.google.com www.apple.com` — use one that prints `PASS`.
+  `scripts/check-reality-target.sh www.intel.com www.microsoft.com` — use one that prints `PASS`.
   Sizes differ by edge: the same site can pass from one place and fail from another, so only the
-  VPS's own measurement counts.
+  VPS's own measurement counts. If your clients are in mainland China, also check from the client
+  side that the name resolves to servers **outside** China: `dl.google.com` and `www.apple.com`
+  pass the size check but resolve to mainland servers there, so sending those names to a foreign
+  IP is not what a normal visitor does (`docs/2026-11-19-reality-target-survey.md`).
 - **IPv6 is not needed on the VPS.** sing-box resolves and dials IPv4 only (`dns.strategy`,
   the `direct` outbound and the Reality handshake are all `ipv4_only`). Without that, a host
   with no IPv6 route gets IPv6-only answers now and then and fails with `network is unreachable`
