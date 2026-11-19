@@ -55,12 +55,17 @@ find_mihomo() {
   command -v mihomo 2>/dev/null || true
 }
 
-# The sing-box version the VPS runs (SINGBOX_VERSION in .env), e.g. v1.11.14; empty when unknown.
+# The sing-box version the VPS runs (SINGBOX_VERSION in the repo-root .env, or in MESH_ENV_FILE
+# for tests), e.g. v1.14.3. The one parser of that line: quotes, a trailing "# comment" and CR are
+# tolerated, the way docker compose reads the same file. Fails (prints nothing) when the file or
+# the line is missing or empty.
 pinned_singbox_version() {
-  local f
+  local f v
   f="$(mesh_env_file)"
-  [[ -f "$f" ]] || return 0
-  grep -E '^SINGBOX_VERSION=' "$f" 2>/dev/null | head -1 | cut -d= -f2 | tr -d '\r'
+  v="$(grep -E '^SINGBOX_VERSION=' "$f" 2>/dev/null | head -1 | cut -d= -f2- \
+       | sed -E 's/[[:space:]]+#.*$//; s/^[[:space:]]*//; s/[[:space:]]*$//' | tr -d "\r\"'")"
+  [[ -n "$v" ]] || return 1
+  printf '%s\n' "$v"
 }
 
 # Print the path of a sing-box binary for local checks, or nothing when none is found.
@@ -70,7 +75,7 @@ find_singbox() {
   local tools ver dir f
   if [[ -n "${SINGBOX_BIN:-}" ]]; then printf '%s\n' "$SINGBOX_BIN"; return; fi
   tools="${MESH_TOOLS_DIR:-$(mesh_repo_root)/.tools}"
-  ver="$(pinned_singbox_version)"
+  ver="$(pinned_singbox_version || true)"
   if [[ -n "$ver" ]]; then
     dir="$tools/sing-box-${ver#v}-$(host_platform)"
     for f in "$dir/sing-box.exe" "$dir/sing-box"; do   # .exe first: MSYS also answers to the bare name

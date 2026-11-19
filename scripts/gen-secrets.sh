@@ -13,9 +13,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 VPS_ENV="$REPO_ROOT/secrets/vps.env"
 MAC_ENV="$REPO_ROOT/secrets/mac.env"
-SB_IMAGE="ghcr.io/sagernet/sing-box:${SINGBOX_VERSION:-v1.11.14}"
-
+# shellcheck source=lib.sh
+source "$SCRIPT_DIR/lib.sh"
 die() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
+SINGBOX_VERSION="${SINGBOX_VERSION:-$(pinned_singbox_version || true)}"
+[[ -n "$SINGBOX_VERSION" ]] || die "SINGBOX_VERSION is not set in $REPO_ROOT/.env"
+SB_IMAGE="ghcr.io/sagernet/sing-box:${SINGBOX_VERSION}"
+
 command -v docker >/dev/null 2>&1 || die "docker not found."
 
 sb() { docker run --rm "$SB_IMAGE" "$@"; }

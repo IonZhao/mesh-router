@@ -22,6 +22,13 @@ services:
       - ./data/sing-box:/etc/sing-box/data        # cache.db lives here (see config path)
       - ./acme:/etc/sing-box/acme                 # Let's Encrypt cert storage (persisted)
     command: ["run", "-c", "/etc/sing-box/config.json"]
+    # sing-box at info writes about 90 MB a day; without a cap the json log fills the disk.
+    # 5 x 50 MB keeps roughly the last three days. Changing this recreates the container.
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
     depends_on:
       - tailscale
 

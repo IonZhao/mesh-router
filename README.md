@@ -34,7 +34,8 @@ VPS (any region, sing-box)        trust split: sensitive -> trusted-exit, else -
   `processed invalid connection`; the client sees `connect error: EOF`). CDN-fronted sites send
   different certificate chains to different places, so check candidates **from the VPS**:
   `scripts/check-reality-target.sh dl.google.com www.apple.com` — use one that prints `PASS`.
-  `www.microsoft.com`, the old default here, can exceed the limit.
+  Sizes differ by edge: the same site can pass from one place and fail from another, so only the
+  VPS's own measurement counts.
 - **IPv6 is not needed on the VPS.** sing-box resolves and dials IPv4 only (`dns.strategy`,
   the `direct` outbound and the Reality handshake are all `ipv4_only`). Without that, a host
   with no IPv6 route gets IPv6-only answers now and then and fails with `network is unreachable`
@@ -55,7 +56,7 @@ VPS (any region, sing-box)        trust split: sensitive -> trusted-exit, else -
 | Path | What |
 |---|---|
 | `vps/docker-compose.yml` | sing-box + tailscale + netdata + uptime-kuma + vnstat (all host-networked) |
-| `vps/sing-box/config.json.template` | 2 inbounds (Reality, Hysteria2), the `trusted-exit` selector, route rules |
+| `vps/sing-box/config.json.template` | 3 inbounds (Reality, Hysteria2 with a 404 masquerade, VLESS+WS for the CDN fallback), the `trusted-exit` selector, route rules |
 | `vps/rulesets/` | `sensitive-domains.json` (→ residential), `api-domains.json` (→ direct) |
 | `vps/bootstrap.sh` | fresh VPS → running stack |
 | `mac-mini/setup.sh` | fresh macOS → running exit node (brew + launchd, no Docker) |
@@ -129,6 +130,11 @@ Docker), and `docker compose run --rm sing-box check -c /etc/sing-box/config.jso
   the check but prints a WARN: its verdict may differ from the VPS's.
 - **jq, openssl, curl, envsubst (`gettext`), timeout (`coreutils`).** The suite stops with
   "prerequisites missing" if any of these is absent.
+
+Besides `sing-box check`, the validator also *starts* the rendered VPS config for a moment on
+loopback ports (every listener moved to 127.0.0.1 and its port + 10000) and waits for
+`sing-box started`: since 1.12 some mistakes are only refused when services start, not when the
+config is decoded.
 
 ### Client host checklist (Clash Verge Rev on Windows)
 
@@ -343,14 +349,22 @@ direct (datacenter IPs are normal for API traffic).
 ## Version pinning
 
 sing-box logs at `info`. To diagnose, re-run `SINGBOX_LOG_LEVEL=debug ./bootstrap.sh`, read
-`docker logs sing-box`, then re-run plain `./bootstrap.sh` — Docker's json log is not rotated, so
-do not leave `debug` on.
+`docker logs sing-box`, then re-run plain `./bootstrap.sh`. The container's json log is capped at 5 × 50 MB
+(`vps/docker-compose.yml`), about three days at `info`; at `debug` it holds far less, so do not
+leave `debug` on.
 
-Before bumping past 1.11: the inbound fields `sniff` / `sniff_override_destination` are
-deprecated (removed in 1.13) and become a `route.rules` entry with `"action": "sniff"`; the Dial
-Field `domain_strategy` used for IPv4-only dialing is deprecated in 1.12 (removed in 1.14) in
-favour of `domain_resolver` with `"strategy": "ipv4_only"`, and the DNS server format changes in
-1.12. Port all three, then run `scripts/test-configs.sh` with the new `SINGBOX_VERSION`.
+`/.env` pins the image tags; `SINGBOX_VERSION` is read from there by `vps/bootstrap.sh` (which
+validates the rendered config with exactly that image before starting it) and by the test suite
+(which looks for the same version under `.tools/`, see "Validating locally"). Bump it in one place.
 
-`/.env` pins image tags. sing-box configs target the **1.11.x** schema. Bumping sing-box to 1.12+
-may require config changes (the DNS server format changed). Always `sing-box check` after a bump.
+The sing-box config targets the **1.12+ schema**, validated against **v1.14.3**: typed DNS
+servers (`"type": "https"`), one `route.default_domain_resolver` with `"strategy": "ipv4_only"`
+instead of per-dial `domain_strategy`, sniffing as the first `route.rules` action, and the
+Hysteria2 certificate from an ACME `certificate_providers` entry instead of inline `tls.acme`.
+The suite asserts each of these, so a future bump that deprecates one of them fails loudly.
+
+Do not go back to 1.11.x: on this VPS, with the clients in use here, a 1.11.14 server rejected
+every Reality client with `REALITY: processed invalid connection` (measured 2026-10-19 with the
+same keys, the same handshake target, several client fingerprints and even a freshly generated
+key pair; the mechanism was not identified), while the same config and keys on v1.14.3 pass the
+self-test from the VPS and from the Windows client.
