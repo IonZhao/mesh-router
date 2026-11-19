@@ -56,7 +56,7 @@ VPS (any region, sing-box)        trust split: sensitive -> trusted-exit, else -
 | Path | What |
 |---|---|
 | `vps/docker-compose.yml` | sing-box + tailscale + netdata + uptime-kuma + vnstat (all host-networked) |
-| `vps/sing-box/config.json.template` | 2 inbounds (Reality, Hysteria2), the `trusted-exit` selector, route rules |
+| `vps/sing-box/config.json.template` | 3 inbounds (Reality, Hysteria2 with a 404 masquerade, VLESS+WS for the CDN fallback), the `trusted-exit` selector, route rules |
 | `vps/rulesets/` | `sensitive-domains.json` (→ residential), `api-domains.json` (→ direct) |
 | `vps/bootstrap.sh` | fresh VPS → running stack |
 | `mac-mini/setup.sh` | fresh macOS → running exit node (brew + launchd, no Docker) |
@@ -296,8 +296,9 @@ direct (datacenter IPs are normal for API traffic).
 ## Version pinning
 
 sing-box logs at `info`. To diagnose, re-run `SINGBOX_LOG_LEVEL=debug ./bootstrap.sh`, read
-`docker logs sing-box`, then re-run plain `./bootstrap.sh` — Docker's json log is not rotated, so
-do not leave `debug` on.
+`docker logs sing-box`, then re-run plain `./bootstrap.sh`. The container's json log is capped at 5 × 50 MB
+(`vps/docker-compose.yml`), about three days at `info`; at `debug` it holds far less, so do not
+leave `debug` on.
 
 `/.env` pins the image tags; `SINGBOX_VERSION` is read from there by `vps/bootstrap.sh` (which
 validates the rendered config with exactly that image before starting it) and by the test suite

@@ -61,6 +61,15 @@
           "password": "${HY2_PASSWORD}"
         }
       ],
+      "masquerade": {
+        "type": "string",
+        "status_code": 404,
+        "headers": {
+          "content-type": "text/html",
+          "server": "nginx"
+        },
+        "content": "<html><head><title>404 Not Found</title></head><body><center><h1>404 Not Found</h1></center><hr><center>nginx</center></body></html>"
+      },
       "tls": {
         "enabled": true,
         "alpn": ["h3"],

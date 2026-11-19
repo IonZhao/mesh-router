@@ -193,6 +193,11 @@ jq_true vps_no_legacy_fields "$VPS_TPL" \
 jq_true vps_sniff_is_the_first_route_action "$VPS_TPL" '.route.rules[0].action == "sniff"'
 jq_true vps_hy2_cert_comes_from_an_acme_provider "$VPS_TPL" \
   '([.certificate_providers[]? | select(.type == "acme") | .tag]) as $t | [.inbounds[] | select(.tag == "hy2-in") | .tls.certificate_provider] | length == 1 and inside($t)'
+# An HTTP/3 request without Hysteria2 auth gets an ordinary web-server answer, not sing-box's bare default.
+jq_true vps_hy2_has_a_masquerade "$VPS_TPL" \
+  '[.inbounds[] | select(.tag == "hy2-in") | .masquerade | (.type == "string" and .status_code == 404)] == [true]'
+# The sing-box json log is capped; uncapped it grew about 90 MB a day on the VPS.
+if grep -A20 'container_name: sing-box' "$REPO_ROOT/vps/docker-compose.yml" | grep -q 'max-size'; then ok vps_singbox_log_is_capped; else ko vps_singbox_log_is_capped; fi
 # Every DNS server is reachable from `final` or a rule (sing-box never queries an orphan server).
 jq_true vps_no_orphan_dns_servers "$VPS_TPL" \
   '[.dns.servers[].tag] - [.dns.final] - [(.dns.rules // [])[].server] == []'
