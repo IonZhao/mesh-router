@@ -126,7 +126,15 @@ rule-providers:
     behavior: domain
     payload:
       - '+.mirrors.tuna.tsinghua.edu.cn'
-  # Remote rule sets: fetched DIRECT from jsDelivr (reachable from China), refreshed daily, cached
+  # Domains the ad list blocks by mistake but that must still work (through the proxy, not DIRECT).
+  # Checked before `ads`. The placeholder never resolves; replace it with real false positives.
+  proxy-extra:
+    type: inline
+    behavior: domain
+    payload:
+      - '+.false-positive.invalid'
+  # Remote rule sets, fetched DIRECT: the CN lists from jsDelivr (MetaCubeX meta-rules-dat), the
+  # ad list from adrules.top (Cats-Team AdRules); both reachable from China, refreshed daily, cached
   # under rules/. render-client-config.sh pre-downloads them into client/rules/ — copy that folder
   # into the client's config directory so the first start does not depend on the download.
   cn-domain:
@@ -157,6 +165,7 @@ rule-providers:
 rules:
   - GEOIP,private,DIRECT,no-resolve
   - RULE-SET,direct-extra,DIRECT      # your overrides first, so they can correct any list below
+  - RULE-SET,proxy-extra,PROXY        # ad-list false positives that must still go through the proxy
   - RULE-SET,ads,REJECT
   - RULE-SET,cn-domain,DIRECT
   - GEOSITE,cn,DIRECT                 # built-in copy of the same data: safety net when rule sets are missing
